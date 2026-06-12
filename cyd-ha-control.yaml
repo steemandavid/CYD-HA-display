@@ -1,0 +1,261 @@
+# =============================================================================
+# CYD (ESP32-2432S028) — Home Assistant control display
+# Shows a power sensor large; three toggle buttons; beep > 4000 W.
+# All site-specific values (Wi-Fi, API key, HA entity IDs) live in secrets.yaml.
+# Board: Cheap Yellow Display, ILI9341 + XPT2046 resistive touch, GPIO26 amp.
+# =============================================================================
+
+substitutions:
+  name: cyd-control
+  friendly_name: "CYD Control Display"
+  color_threshold: "200"         # watts — label green below, red at/above
+  buzzer_threshold: "4000"       # watts — alarm beeps above this
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# ---- Connectivity ----------------------------------------------------------
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap: {}                         # fallback hotspot if wifi fails
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_encryption_key   # `esphome` will offer to generate one
+
+ota:
+  - platform: esphome
+
+# ---- SPI buses -------------------------------------------------------------
+# Two SEPARATE buses: one for the display, one for the XPT2046 touch.
+spi:
+  - id: spi_display
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+  - id: spi_touch
+    clk_pin: GPIO25
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+
+# ---- Outputs ---------------------------------------------------------------
+output:
+  # Display backlight
+  - platform: ledc
+    pin: GPIO21
+    id: backlight_pwm
+  # Onboard speaker/amp is on GPIO26. Use LEDC PWM (not DAC) — rtttl requires it.
+  - platform: ledc
+    pin: GPIO26
+    id: speaker_pwm
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    id: backlight
+    name: "Backlight"
+    restore_mode: ALWAYS_ON
+
+# ---- Speaker / beep --------------------------------------------------------
+rtttl:
+  id: buzzer
+  output: speaker_pwm
+  gain: 60%          # GPIO26 amp is loud; tune to taste
+
+# ---- Display ---------------------------------------------------------------
+display:
+  - platform: ili9xxx
+    id: cyd_display
+    model: ILI9342
+    spi_id: spi_display
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    invert_colors: false
+    auto_clear_enabled: false
+    update_interval: never       # LVGL owns the screen
+
+# ---- Touchscreen -----------------------------------------------------------
+touchscreen:
+  - platform: xpt2046
+    id: cyd_touch
+    spi_id: spi_touch
+    cs_pin: GPIO33
+    interrupt_pin: GPIO36
+    update_interval: 50ms
+    threshold: 400
+    # Typical calibration for this board. Adjust if taps are off.
+    calibration:
+      x_min: 280
+      x_max: 3860
+      y_min: 340
+      y_max: 3860
+    # Hardware-level fixes for the CYD PCB (XPT2046 axes are physically swapped
+    # vs the ILI9341). mirror_x added to fix left/right being flipped — only
+    # surfaced once buttons were placed side by side (X axis started to matter).
+    transform:
+      swap_xy: true
+      mirror_x: true
+      mirror_y: true
+
+# ---- Power value imported from Home Assistant ------------------------------
+sensor:
+  - platform: homeassistant
+    id: power_combined
+    entity_id: !secret power_entity
+    on_value:
+      - lvgl.label.update:
+          id: power_label
+          text: !lambda |-
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f W", x * 1000.0f);
+            return std::string(buf);
+      # Green below 200 W, red at/above.
+      - lvgl.label.update:
+          id: power_label
+          text_color: !lambda |-
+            return (x * 1000.0f < ${color_threshold}) ? lv_color_hex(0x34C759)
+                                            : lv_color_hex(0xFF3B30);
+
+# ---- Over-threshold detection (5 s debounce) -------------------------------
+binary_sensor:
+  - platform: template
+    id: power_high
+    name: "Power above threshold"
+    lambda: |-
+      if (!id(power_combined).has_state()) return false;
+      return id(power_combined).state * 1000.0f > ${buzzer_threshold};
+    # Must stay above for 5 s before the alarm arms.
+    filters:
+      - delayed_on: 5s
+    on_press:
+      - script.execute: beep_loop
+    on_release:
+      - script.stop: beep_loop
+
+# ---- Beep loop: short beep every few seconds while armed --------------------
+script:
+  - id: beep_loop
+    mode: restart
+    then:
+      - while:
+          condition:
+            binary_sensor.is_on: power_high
+          then:
+            - rtttl.play: "beep:d=4,o=5,b=100:16e6"
+            - delay: 3s
+
+# ---- Helper: momentary pulse on a switch -----------------------------------
+# Used by the three buttons. Calls turn_on, waits, then turn_off.
+# (Implemented inline per-button below for clarity.)
+
+# ---- LVGL UI ---------------------------------------------------------------
+lvgl:
+  displays:
+    - cyd_display
+  rotation: 0
+  buffer_size: 25%
+  touchscreens:
+    - touchscreen_id: cyd_touch
+  theme:
+    button:
+      bg_color: 0x1C6DD0
+      bg_grad_color: 0x14508F
+      bg_grad_dir: VER
+      radius: 8
+      text_color: 0xFFFFFF
+  pages:
+    - id: main_page
+      widgets:
+        # --- Big power readout -------------------------------------------
+        - obj:
+            align: TOP_MID
+            y: 6
+            width: 300
+            height: 96
+            bg_opa: TRANSP
+            border_width: 0
+            widgets:
+              - label:
+                  text: "Verbruik"
+                  align: TOP_MID
+                  text_color: 0xAAAAAA
+                  text_font: montserrat_20
+              - label:
+                  id: power_label
+                  text: "-- W"
+                  align: BOTTOM_MID
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_48
+
+        # --- Three tall buttons side by side -----------------------------
+        # Lower area (y 110..230). Each ~100 wide x 116 tall; 6px side margins,
+        # 4px gaps. Labels wrap to fit the narrower width.
+
+        # --- Button: garage open -----------------------------------------
+        - button:
+            align: TOP_LEFT
+            x: 6
+            y: 110
+            width: 100
+            height: 116
+            widgets:
+              - label:
+                  text: "Garage OPENEN"
+                  align: CENTER
+                  width: 90
+                  text_align: CENTER
+            on_short_click:
+              - logger.log: "Button: Garage OPENEN -> toggle garage_open_switch"
+              - homeassistant.action:
+                  action: switch.toggle
+                  data:
+                    entity_id: !secret garage_open_switch
+
+        # --- Button: garage close ----------------------------------------
+        - button:
+            align: TOP_LEFT
+            x: 110
+            y: 110
+            width: 100
+            height: 116
+            widgets:
+              - label:
+                  text: "Garage SLUITEN"
+                  align: CENTER
+                  width: 90
+                  text_align: CENTER
+            on_short_click:
+              - logger.log: "Button: Garage SLUITEN -> toggle garage_close_switch"
+              - homeassistant.action:
+                  action: switch.toggle
+                  data:
+                    entity_id: !secret garage_close_switch
+
+        # --- Button: door lock -------------------------------------------
+        - button:
+            align: TOP_LEFT
+            x: 214
+            y: 110
+            width: 100
+            height: 116
+            widgets:
+              - label:
+                  text: "Deurslot WACHTKAMER"
+                  align: CENTER
+                  width: 90
+                  text_align: CENTER
+            on_short_click:
+              - logger.log: "Button: Deurslot WACHTKAMER -> toggle doorlock_switch"
+              - homeassistant.action:
+                  action: switch.toggle
+                  data:
+                    entity_id: !secret doorlock_switch
