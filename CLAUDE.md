@@ -12,8 +12,17 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 
 ## Project Files
 - `cyd-ha-control.yaml` — Main ESPHome firmware config
-- `secrets.yaml` — Wi-Fi credentials + API encryption key (matches HA's `/config/esphome/secrets.yaml`)
+- `secrets.yaml` — **single source of truth for ALL site-specific values** (git-ignored): Wi-Fi, API key, HA entity IDs, and IPs. Matches HA's `/config/esphome/secrets.yaml` for the API key.
+- `secrets.yaml.example` — sanitized template committed in place of the real secrets
 - `CYD-HA-Control-SPEC.md` — Original functional specification
+
+## Public Repo / Secrets Convention
+- Repo is **public** at https://github.com/steemandavid/CYD-HA-display
+- No committed file may contain real site-specific data. The firmware pulls entities via
+  ESPHome `!secret` (`!secret power_entity`, `garage_open_switch`, `garage_close_switch`,
+  `doorlock_switch`); docs use placeholders (`<HA_IP>`, `<CYD_IP>`, `<your-wifi-ssid>`,
+  `switch.your_garage_open`, etc.). Real values live only in local `secrets.yaml`.
+- This is a plain (Syncthing-synced) dir with a git repo + GitHub remote — commit/push on changes.
 
 ## Key Technical Decisions
 

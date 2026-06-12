@@ -239,3 +239,76 @@ coordinate selected a full-width button. Fix: `mirror_x: false → true` in the 
 | `cyd-ha-control.yaml` | Split thresholds (`color_threshold` 200 / `buzzer_threshold` 4000); green/red label lambda; buttons → side-by-side tall layout; `mirror_x: true` |
 | `CLAUDE.md` | (carried) status reflects working state |
 | Memory `cyd-display-driver-findings.md` | Added correct XPT2046 transform + the layout-hides-mirror lesson |
+
+---
+
+# 2026-06-12 (session 4): README, Secrets Centralization & Public GitHub Repo
+
+## Summary
+
+Packaged the project for a **public** GitHub repo. Wrote a full `README.md`, centralized
+**all** site-specific values into git-ignored `secrets.yaml` (referenced from the firmware via
+ESPHome `!secret`), sanitized every committed doc, scrubbed git history to a single clean
+commit, and published publicly.
+
+Repo: **https://github.com/steemandavid/CYD-HA-display** (public)
+
+## 1. README + initial repo
+
+Wrote `README.md` (features, hardware/pinout, getting-started, config, gotchas). Initialized
+git, set identity `David Steeman <david@steeman.be>`, created a **private** repo and pushed.
+`.gitignore` already excluded `secrets.yaml` + `.esphome/`.
+
+## 2. Secrets centralization (user's idea)
+
+Goal: keep sensitive data in one place. Realized via ESPHome `!secret`:
+
+- Moved HA entity IDs + IPs into `secrets.yaml` (now the single source of truth: Wi-Fi, API
+  key, `power_entity`, `garage_open_switch`, `garage_close_switch`, `doorlock_switch`,
+  `ha_ip`, `cyd_ip`).
+- Firmware references them with `!secret` (e.g. `entity_id: !secret garage_open_switch`);
+  removed the `power_entity` substitution; genericized log strings + header comment.
+- `secrets.yaml.example` mirrors it with placeholders.
+- Committed `cyd-ha-control.yaml` now contains **zero** site-specific data. Config still
+  validates.
+
+> **Caveat (explained to user):** Markdown can't reference a config file (GitHub renders it
+> static), so docs can't pull from `secrets.yaml` — they were sanitized in place instead.
+> Nothing lost: real values live in local `secrets.yaml`.
+
+## 3. Doc sanitization
+
+`sed` over `README.md`, `CLAUDE.md`, `changelog.md`, `CYD-HA-Control-SPEC.md`, replacing only
+real values (not generic HA services like `switch.toggle`):
+
+| Category | Placeholder |
+|----------|-------------|
+| CYD / HA LAN IPs | `<CYD_IP>` / `<HA_IP>` |
+| Wi-Fi SSID | `<your-wifi-ssid>` |
+| Garage open/close switch entities | `switch.your_garage_open` / `..._close` |
+| Door-lock switch entity | `switch.your_door_lock` |
+| Power sensor entity | `sensor.your_power` |
+
+Verified with `git grep` over the committed tree: no real IPs, SSID, entity names, Wi-Fi
+password, or API key remain.
+
+## 4. History scrub + go public
+
+The first commit contained unsanitized values. Squashed to a single clean root commit
+(`git commit --amend`) and `git push --force`. Token lacked `delete_repo` scope, so could not
+delete+recreate; flipped visibility to public via `gh api -X PATCH … -F private=false`.
+
+> **Residual caveat (user accepted):** the old commit (`6557236`) survives as a *dangling*
+> object on GitHub until GC — unreachable via any ref, but fetchable by exact SHA until then.
+> For a guaranteed clean slate: `gh auth refresh -s delete_repo` then delete + recreate.
+
+## 5. Files Modified (session 4)
+
+| File | Status |
+|------|--------|
+| `README.md` | Created, then revised for the secrets-centric approach |
+| `secrets.yaml` | Extended to hold entity IDs + IPs (git-ignored) |
+| `secrets.yaml.example` | Created/extended sanitized template |
+| `cyd-ha-control.yaml` | Entities via `!secret`; generic log strings; removed `power_entity` sub |
+| `CLAUDE.md` / `changelog.md` / `CYD-HA-Control-SPEC.md` | Sanitized in place; CLAUDE.md gained a public-repo/secrets convention section |
+| `.gitignore` | (unchanged — already excluded `secrets.yaml`) |
