@@ -312,3 +312,60 @@ delete+recreate; flipped visibility to public via `gh api -X PATCH … -F privat
 | `cyd-ha-control.yaml` | Entities via `!secret`; generic log strings; removed `power_entity` sub |
 | `CLAUDE.md` / `changelog.md` / `CYD-HA-Control-SPEC.md` | Sanitized in place; CLAUDE.md gained a public-repo/secrets convention section |
 | `.gitignore` | (unchanged — already excluded `secrets.yaml`) |
+
+---
+
+# 2026-06-12 (session 5): Blog Post & Website Deployment
+
+## Summary
+
+Wrote and published a blog post about the CYD HA Control Display project on
+[steeman.be](https://www.steeman.be/). Deployed to production via FTP.
+
+## 1. Blog post
+
+Created `/home/john/claudecode/projects/website-steeman.be/content/posts/turning-a-cheap-yellow-display-into-a-home-assistant-wall-panel.md`:
+
+- **Title:** "Turning a Cheap Yellow Display into a Home Assistant Control Panel"
+- **Categories:** Electronics, DIY, ESP32, Home Assistant
+- **Image directory created:** `static/images/CYD-HA-Display/` (no photos yet — TODO placeholders in post)
+
+### Sections written
+
+1. **Opening** — the real motivation: kids at the front door, wanting a desk panel for power consumption and door/garage control
+2. **What is a CYD?** — board overview for readers unfamiliar with it
+3. **What I wanted it to do** — three requirements (power display, buttons, alarm)
+4. **Why ESPHome?** — framework rationale
+5. **The build** — four gotchas (ILI9342 display model, touch mirror_x, ledc vs esp32_dac for speaker, kW vs W units)
+6. **The firmware** — YAML architecture with beep alarm code snippet
+7. **Building this with Claude Code** — the entire firmware was AI-generated, no hand-written code; iterative debugging workflow
+8. **What you need to build one** — bill of materials table (~€8 CYD, USB cable, optional 3D printer), software requirements, link to GitHub repo
+9. **Mounting it on the wall (or desk)** — [MakerWorld wall mount](https://makerworld.com/en/models/2655345-wall-mount-for-cyd-cheap-yellow-display-xtouch) by kenzoteke
+10. **HA permissions** — the hidden "Allow device to perform actions" toggle
+11. **First flash and OTA** — USB then wireless
+12. **Lessons learned**
+13. **Resources** — links to GitHub repo, ESPHome docs, LVGL, HA, CYD pinout, MakerWorld case, TiltBox post
+
+### Edits after initial draft
+
+- Added wall mount section (MakerWorld model by kenzoteke)
+- Rewrote opening to tell the real story (kids at front door, desk control panel)
+- Changed "waiting room lock" → "front door lock" throughout
+- Added Claude Code section — no hand-written code
+- Added "What you need to build one" section with BOM table
+- Added GitHub repo links throughout
+
+## 2. Deployment
+
+Built Hugo site (`hugo --gc --minify`, 142 pages) and uploaded 30 files to `ftp.steeman.be` via curl:
+
+- New post page, main index, RSS/sitemap, posts index, 4 category page sets (Electronics, DIY, ESP32, Home Assistant), all pagination pages
+
+**Live at:** https://www.steeman.be/posts/turning-a-cheap-yellow-display-into-a-home-assistant-wall-panel/
+
+## 3. Files Modified
+
+| File | Status |
+|------|--------|
+| `website-steeman.be/content/posts/turning-a-cheap-yellow-display-into-a-home-assistant-wall-panel.md` | Created (blog post) |
+| `website-steeman.be/static/images/CYD-HA-Display/` | Created (empty — photos TODO) |
