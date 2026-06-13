@@ -484,3 +484,30 @@ Full review of `CLAUDE.md`, `README.md`, `CYD-HA-Control-SPEC.md`, `changelog.md
 | `README.md` | Alarm 3000 W; 3-tier colour + dark card features; BGR gotcha; `Deurslot WACHT KAMER` |
 | `CYD-HA-Control-SPEC.md` | Added "Historical note" divergence banner |
 | `changelog.md` | This session-6 entry |
+
+---
+
+## 9. Blog post update & deploy (steeman.be)
+
+Updated the existing steeman.be post (created in session 5) to reflect this session's
+changes, then rebuilt and deployed.
+
+Post edits (`website-steeman.be/content/posts/turning-a-cheap-yellow-display-into-a-home-assistant-wall-panel.md`):
+
+- Alarm threshold 4000→3000 W; speaker gain 60%→10%.
+- Added a **"Colours — the fourth gotcha (and the sneakiest)"** section telling the ILI9342
+  red/blue-swap story for a general reader (blue→orange, red→blue, green fine; `color_order`
+  a no-op; the BGR fix).
+- UI description rewritten: dark theme + 3-tier green/blue/red value + HA-blue buttons.
+- Line count "260" → "270-odd".
+
+Deploy: `hugo --gc --minify` (142 pages), then curl FTP upload of **22 changed files** to
+ftp.steeman.be — the post page plus homepage, RSS, sitemap, posts index, and the 4 category
+pages (diy/electronics/esp32/home-assistant) with their pagination. 0 failures. Verified live:
+HTTP 200, "3000 W" present, "fourth gotcha" present, "4000 W" gone. (Confirmed the post
+appears only on the homepage, so no `page/2+` upload was needed.)
+
+Git: the post was **untracked** in the website repo (session 5 deployed it but never committed
+it). Committed just that one file — explicit `git add` of the single `.md`, never `git add .`,
+because the website repo has 1101 modified files (the `old-site/` binary churn) — and pushed
+(`5e2fbb6` → `website-steeman.be` main).
