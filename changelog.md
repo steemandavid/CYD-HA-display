@@ -369,3 +369,118 @@ Built Hugo site (`hugo --gc --minify`, 142 pages) and uploaded 30 files to `ftp.
 |------|--------|
 | `website-steeman.be/content/posts/turning-a-cheap-yellow-display-into-a-home-assistant-wall-panel.md` | Created (blog post) |
 | `website-steeman.be/static/images/CYD-HA-Display/` | Created (empty — photos TODO) |
+
+---
+
+# 2026-06-13 (session 6): Dark Theme, 3-Tier Power Colours & the ILI9342 Red/Blue Swap
+
+## Summary
+
+UI overhaul of the CYD panel: retuned the alarm/gain, redesigned the power readout into a
+dark **Home Assistant-style** card with a **3-tier green/blue/red** value, recoloured the
+buttons to HA blue, and chased down a stubborn **red/blue colour-channel swap** that turned
+out to be unrecoverable from config (the real fix is BGR-encoded colour constants). Also a
+full documentation review/sync. All work over OTA at <CYD_IP>.
+
+## 1. Tuning
+
+| Setting | Before | After |
+|---------|--------|-------|
+| `buzzer_threshold` (over-power alarm) | 4000 W | **3000 W** |
+| rtttl `gain` (speaker volume) | 60% | **10%** |
+
+## 2. Power value — vibrant colours → 3-tier
+
+Original label colours were "very bland". Moved to a 3-tier scheme driven by two
+substitutions — red intentionally tracks `buzzer_threshold`, so the number turns red exactly
+when the alarm is about to arm:
+
+| Power | Colour | Hex (true RGB) |
+|-------|--------|----------------|
+| < 200 W (`color_threshold`) | vibrant green | `0x39FF14` |
+| 200–3000 W | HA blue | `0x03A9F4` |
+| ≥ 3000 W (`buzzer_threshold`) | vibrant red | `0xFF1744` |
+
+Implemented as an `if / else if / else` lambda (was a 2-way ternary).
+
+## 3. Buttons — Home Assistant blue + label fix
+
+- Button theme recoloured to HA blue: `bg_color 0x03A9F4` → grad `0x0288D1`, white text.
+- Door-lock label `"Deurslot WACHTKAMER"` → `"Deurslot WACHT KAMER"` (added space so the long
+  Dutch text wraps cleanly in the 90 px-wide label). Updated the matching `logger.log` string
+  and the README button table.
+
+## 4. Dark theme
+
+White (LVGL default) screen background replaced with a dark HA-style surface:
+
+- Screen background: `0x101418` (deep blue-black) — set on `main_page`
+- Card panel behind the power readout: `0x1A2028`, `bg_opa: COVER`, `radius: 8`
+- "Verbruik" subheader text: grey `0xAAAAAA` → soft blue-grey `0xB0BEC5`
+
+## 5. The red/blue colour-swap saga (key gotcha)
+
+After the dark-theme flash, colours were wrong: **blue rendered orange, red rendered blue,
+green looked fine.** Diagnosis:
+
+- It's a **clean R/B byte-swap**: `0x03A9F4` (blue) → `0xF4A903` (orange); `0xFF1744` (red) →
+  `0x4417FF` (blue). Green is nearly swap-symmetric, which is why nobody noticed earlier
+  (low power is always green).
+- Root cause: the `ili9xxx` `model: ILI9342` preset sets **`MADCTL=0x48` with the BGR bit**,
+  so the panel swaps red/blue of every pixel it receives.
+
+**First fix attempt — `color_order: BGR` on the display — FAILED.** It left the output
+identical. Proven by elimination: for `color_order` to be effective, *some* assumption about
+the default would have to make "default" and "BGR" differ — but both produced the same
+swapped output. So `color_order:` is a **no-op on the LVGL direct-buffer path** (LVGL owns
+the screen via `update_interval: never`, bypassing the ili9xxx colour-order handling).
+
+**Real fix — write all colours BGR (R/B byte-swapped).** An R/B swap is its own inverse, so
+pre-swapping each constant makes the panel's swap cancel out. Centralised as `col_*`
+substitutions with the true colour commented, so they stay maintainable:
+
+```yaml
+col_bg: "0x181410"        # -> true 0x101418  dark screen
+col_card: "0x28201A"      # -> true 0x1A2028  power card panel
+col_label: "0xC5BEB0"     # -> true 0xB0BEC5  "Verbruik" subheader
+col_low: "0x14FF39"       # -> true 0x39FF14  green  (power < 200 W)
+col_mid: "0xF4A903"       # -> true 0x03A9F4  HA blue (200-3000 W, buttons)
+col_high: "0x4417FF"      # -> true 0xFF1744  red    (power >= 3000 W)
+col_btn_bot: "0xD18802"   # -> true 0x0288D1  button gradient bottom
+```
+
+Confirmed visually: 171 W / −30 W green, 2314 W blue, 3774 W red, buttons HA blue.
+
+## 6. OTA workflow — clearing stuck processes
+
+The first OTA attempt hung. Cause: **three `esphome run` processes left over from Jun 12**
+were still alive and holding the ESPHome build lock — the new compile was blocked (2 s CPU,
+not compiling), not slow. Device itself was fine (ping 0% loss, OTA port 3232 open).
+
+- `pkill -f "bin/esphome run"` to clear them; confirmed no stale build mutex (the only
+  `.lock` is `dependencies.lock`, a manifest, not a process lock).
+- Switched from `esphome run` (which waits on an interactive "show logs?" prompt — the likely
+  reason the Jun 12 processes hung) to **`esphome compile` then `esphome upload --device`**,
+  output redirected to a live log file (`< /dev/null` to satisfy any prompt). Reliable.
+
+## 7. Documentation review
+
+Full review of `CLAUDE.md`, `README.md`, `CYD-HA-Control-SPEC.md`, `changelog.md`:
+
+- Fixed stale values from this session (4000→3000 W, 60%→10% gain) across CLAUDE.md/README.
+- Added a "Historical note" banner to the SPEC pointing to CLAUDE.md/changelog as the source
+  of truth (the SPEC is the original, pre-build spec and intentionally diverges).
+- Recorded the BGR red/blue-swap gotcha in CLAUDE.md (Display Driver) and README (gotchas) —
+  corrected twice, since the first version wrongly claimed `color_order: BGR` was the fix.
+- Verified the public-repo secret convention: `git grep` over tracked files shows no real
+  IPs/SSIDs/entities leaked.
+
+## 8. Files Modified
+
+| File | Status |
+|------|--------|
+| `cyd-ha-control.yaml` | Threshold 3000 W; gain 10%; dark theme (screen + card); 3-tier colour lambda; HA-blue buttons; `Deurslot WACHT KAMER`; **`col_*` BGR colour substitutions** (the R/B-swap fix) |
+| `CLAUDE.md` | Status → 2026-06-13; gain 10%; BGR red/blue-swap gotcha; 3-tier thresholds; fixed `your_garage_open/close` typo |
+| `README.md` | Alarm 3000 W; 3-tier colour + dark card features; BGR gotcha; `Deurslot WACHT KAMER` |
+| `CYD-HA-Control-SPEC.md` | Added "Historical note" divergence banner |
+| `changelog.md` | This session-6 entry |

@@ -4,6 +4,8 @@
 **Deliverable:** A working ESPHome firmware flashed over USB to a Cheap Yellow Display, acting as a wall control panel for Home Assistant.
 **Author of spec:** David. **Status:** ready to build.
 
+> **Historical note:** This is the *original* functional specification as written before the build. The shipped firmware diverges from it in several resolved ways — e.g. display model **ILI9342** (not ILI9341), **`ledc`** output (not `esp32_dac`) for the speaker, buttons use **`switch.toggle`** (not a momentary pulse), the power sensor reports **kW** (×1000 applied), and thresholds/colors have been tuned (over-power alarm now **3000 W**, label green `<200 W` / red `≥200 W`). For the current, authoritative state see **`CLAUDE.md`** ("Key Technical Decisions") and **`changelog.md`**.
+
 ---
 
 ## 1. Goal

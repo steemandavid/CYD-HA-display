@@ -12,15 +12,15 @@ plus an audible over-power alarm.
 
 ## Features
 
-- **Live power readout** — displays `sensor.your_power` in watts, large and centered.
-  - Label turns **green below 200 W** and **red at/above 200 W**.
+- **Live power readout** — displays `sensor.your_power` in watts, large and centered on a dark **Home Assistant-style** card.
+  - **Three-tier colour:** green below 200 W, blue 200–3000 W, red at/above 3000 W.
 - **Three toggle buttons** laid out side by side (tall, easy-to-hit rectangles):
   | Button | Action |
   |--------|--------|
   | Garage OPENEN | toggles `switch.your_garage_open` |
   | Garage SLUITEN | toggles `switch.your_garage_close` |
-  | Deurslot WACHTKAMER | toggles `switch.your_door_lock` |
-- **Over-power alarm** — short repeating beep while power stays **above 4000 W** for 5 s
+  | Deurslot WACHT KAMER | toggles `switch.your_door_lock` |
+- **Over-power alarm** — short repeating beep while power stays **above 3000 W** for 5 s
   (5 s debounce), via the onboard speaker.
 
 ## Hardware
@@ -125,7 +125,7 @@ above. To point the panel at different entities, just edit those values.
 | Substitution | Default | Meaning |
 |--------------|---------|---------|
 | `color_threshold` | `200` | Watts; label green below, red at/above |
-| `buzzer_threshold` | `4000` | Watts; alarm beeps above this (5 s debounce) |
+| `buzzer_threshold` | `3000` | Watts; alarm beeps above this (5 s debounce) |
 
 ## Key technical decisions & gotchas
 
@@ -134,7 +134,7 @@ These were hard-won during bring-up — see `CLAUDE.md` for the full story.
 - **Display driver: use `model: ILI9342` with the `ili9xxx` platform.** It shares the
   ILI9341 init sequence but defaults to 320×240 landscape, giving correct orientation with
   LVGL `rotation: 0` and **no** display transform. The `mipi_spi` platform produces garbled
-  output on this board regardless of configuration.
+  output on this board regardless of configuration. **Colour constants are written BGR** (red/blue byte-swapped) — the ILI9342 preset enables the display's BGR mode, so the panel swaps red/blue; the `col_*` substitutions pre-swap to compensate (`color_order:` has no effect on the LVGL path). Without this, blue shows orange and red shows blue (green looks fine, which hides it).
 - **Touch transform: `swap_xy: true, mirror_x: true, mirror_y: true`.** A wrong `mirror_x`
   is invisible while widgets are full-width-stacked (only the Y axis selects a widget) — it
   only shows up with side-by-side widgets as flipped left/right taps.

@@ -1,6 +1,6 @@
 # =============================================================================
 # CYD (ESP32-2432S028) — Home Assistant control display
-# Shows a power sensor large; three toggle buttons; beep > 4000 W.
+# Shows a power sensor large; three toggle buttons; beep > 3000 W.
 # All site-specific values (Wi-Fi, API key, HA entity IDs) live in secrets.yaml.
 # Board: Cheap Yellow Display, ILI9341 + XPT2046 resistive touch, GPIO26 amp.
 # =============================================================================
@@ -8,8 +8,19 @@
 substitutions:
   name: cyd-control
   friendly_name: "CYD Control Display"
-  color_threshold: "200"         # watts — label green below, red at/above
-  buzzer_threshold: "4000"       # watts — alarm beeps above this
+  color_threshold: "200"         # watts — power value green below, blue at/above (red tracks buzzer_threshold)
+  buzzer_threshold: "3000"       # watts — alarm beeps above this
+  # --- Colour constants are written BGR (red/blue byte-swapped): the ILI9342 panel's
+  #     MADCTL BGR bit swaps R/B, so values are pre-swapped to compensate.
+  #     (`color_order:` has no effect on the LVGL path; swap the 1st/3rd byte to
+  #     read the true intended colour.)
+  col_bg: "0x181410"        # -> true 0x101418  dark screen background
+  col_card: "0x28201A"      # -> true 0x1A2028  panel behind power readout
+  col_label: "0xC5BEB0"     # -> true 0xB0BEC5  "Verbruik" subheader (blue-grey)
+  col_low: "0x14FF39"       # -> true 0x39FF14  green  (power < 200 W)
+  col_mid: "0xF4A903"       # -> true 0x03A9F4  HA blue (power 200-3000 W + buttons)
+  col_high: "0x4417FF"      # -> true 0xFF1744  red    (power >= 3000 W)
+  col_btn_bot: "0xD18802"   # -> true 0x0288D1  button gradient bottom
 
 esphome:
   name: ${name}
@@ -69,7 +80,7 @@ light:
 rtttl:
   id: buzzer
   output: speaker_pwm
-  gain: 60%          # GPIO26 amp is loud; tune to taste
+  gain: 10%          # GPIO26 amp is loud; tune to taste
 
 # ---- Display ---------------------------------------------------------------
 display:
@@ -118,12 +129,17 @@ sensor:
             char buf[16];
             snprintf(buf, sizeof(buf), "%.0f W", x * 1000.0f);
             return std::string(buf);
-      # Green below 200 W, red at/above.
+      # Three-tier colour: green < 200 W, blue 200-3000 W, red at/above 3000 W (= alarm).
       - lvgl.label.update:
           id: power_label
           text_color: !lambda |-
-            return (x * 1000.0f < ${color_threshold}) ? lv_color_hex(0x34C759)
-                                            : lv_color_hex(0xFF3B30);
+            float watts = x * 1000.0f;
+            if (watts < ${color_threshold})
+              return lv_color_hex(${col_low});   // green - low
+            else if (watts < ${buzzer_threshold})
+              return lv_color_hex(${col_mid});   // blue - normal
+            else
+              return lv_color_hex(${col_high});   // red - high (alarm)
 
 # ---- Over-threshold detection (5 s debounce) -------------------------------
 binary_sensor:
@@ -167,13 +183,14 @@ lvgl:
     - touchscreen_id: cyd_touch
   theme:
     button:
-      bg_color: 0x1C6DD0
-      bg_grad_color: 0x14508F
+      bg_color: ${col_mid}
+      bg_grad_color: ${col_btn_bot}
       bg_grad_dir: VER
       radius: 8
       text_color: 0xFFFFFF
   pages:
     - id: main_page
+      bg_color: ${col_bg}
       widgets:
         # --- Big power readout -------------------------------------------
         - obj:
@@ -181,13 +198,15 @@ lvgl:
             y: 6
             width: 300
             height: 96
-            bg_opa: TRANSP
+            bg_color: ${col_card}
+            bg_opa: COVER
+            radius: 8
             border_width: 0
             widgets:
               - label:
                   text: "Verbruik"
                   align: TOP_MID
-                  text_color: 0xAAAAAA
+                  text_color: ${col_label}
                   text_font: montserrat_20
               - label:
                   id: power_label
@@ -249,12 +268,12 @@ lvgl:
             height: 116
             widgets:
               - label:
-                  text: "Deurslot WACHTKAMER"
+                  text: "Deurslot WACHT KAMER"
                   align: CENTER
                   width: 90
                   text_align: CENTER
             on_short_click:
-              - logger.log: "Button: Deurslot WACHTKAMER -> toggle doorlock_switch"
+              - logger.log: "Button: Deurslot WACHT KAMER -> toggle doorlock_switch"
               - homeassistant.action:
                   action: switch.toggle
                   data:
