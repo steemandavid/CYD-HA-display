@@ -14,6 +14,10 @@ plus an audible over-power alarm.
 
 - **Live power readout** — displays `sensor.your_power` in watts, large and centered on a dark **Home Assistant-style** card.
   - **Three-tier colour:** green below 200 W, blue 200–3000 W, red at/above 3000 W.
+- **AI usage row** — four cells between the power card and the buttons, colour-coded by provider:
+  - **Claude** (clay `#D97757`): `cc 5h` % and `cc reset` countdown.
+  - **z.ai** (blue `#1F63EC`): `z.ai 5h` % and `z.ai reset` countdown.
+  - `%` cells read the usage sensors directly; reset cells read HA **template sensors** that compute minutes-to-reset (ESPHome can't read timestamp entities as numbers).
 - **Three toggle buttons** laid out side by side (tall, easy-to-hit rectangles):
   | Button | Action |
   |--------|--------|
@@ -86,6 +90,12 @@ power_entity: sensor.your_power            # sensor shown on screen (reports kW)
 garage_open_switch: switch.your_garage_open
 garage_close_switch: switch.your_garage_close
 doorlock_switch: switch.your_door_lock
+
+# AI usage row (the reset ones are HA template sensors computing minutes-to-reset)
+claude_5h_entity: sensor.your_claude_5h_usage
+claude_reset_entity: sensor.your_claude_reset_minutes
+zai_5h_entity: sensor.your_zai_5h_quota
+zai_reset_entity: sensor.your_zai_reset_minutes
 ```
 
 > The `api_encryption_key` must match the key Home Assistant has for this device
@@ -144,6 +154,10 @@ These were hard-won during bring-up — see `CLAUDE.md` for the full story.
 - **HA-side permission:** ESPHome *sending* a `homeassistant.action` is not the same as HA
   *executing* it — the device's "Allow the device to perform Home Assistant actions" toggle
   in the ESPHome integration must be ON.
+- **AI-row reset cells need template sensors:** ESPHome imports timestamp entities (the
+  Claude/z.ai reset times) as ISO strings, not numbers, so the reset countdowns are computed by
+  HA template sensors (minutes-to-reset) and read in as plain numbers. The brand colours
+  (`#D97757` Claude clay, `#1F63EC` z.ai blue) are written BGR like every other `col_*` (above).
 
 ## License
 

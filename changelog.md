@@ -511,3 +511,117 @@ Git: the post was **untracked** in the website repo (session 5 deployed it but n
 it). Committed just that one file — explicit `git add` of the single `.md`, never `git add .`,
 because the website repo has 1101 modified files (the `old-site/` binary churn) — and pushed
 (`5e2fbb6` → `website-steeman.be` main).
+
+---
+
+# 2026-06-19 (session 7): AI Usage Row (cc + z.ai quota cells)
+
+## Summary
+
+Added a 4-cell AI-usage row between the power card and the buttons, mirroring the new HA "AI
+usage" dashboard: each provider (Claude, z.ai) gets a 5h-% cell and a reset-countdown cell,
+colour-coded with the real brand colours. To make room the power card dropped its "Verbruik"
+label and shrank; the buttons shifted down. The two reset cells read HA **template sensors**
+because ESPHome can't import timestamp entities as numbers. All work over OTA at <CYD_IP>.
+
+## 1. Layout rework (320×240)
+
+Removed the "Verbruik" subheader to free a row, then redistributed vertically:
+
+| Region | Before | After |
+|---|---|---|
+| Power card | y6 h96 (label + value) | y4 h64 (value only) |
+| AI row | — | y70 h58 (NEW) |
+| Buttons | y110 h116 | y130 h106 |
+
+AI row = 4 display-only `obj` cells, 74×58, at x 6/84/162/240 (6px side margins, 4px gaps).
+
+## 2. The four cells
+
+| Cell | Colour | Source |
+|---|---|---|
+| cc 5h      | Claude clay #D97757 | `sensor.your_claude_5h_usage` (%) |
+| cc reset   | Claude clay #D97757 | NEW HA template: minutes to session reset |
+| z.ai 5h    | z.ai blue #1F63EC   | `sensor.your_zai_5h_quota` (%) |
+| z.ai reset | z.ai blue #1F63EC   | NEW HA template: minutes to 5h reset |
+
+Provider name is in the caption (`cc` / `z.ai`) as well as the colour.
+
+## 3. Brand colours (sourced from real assets)
+
+- Claude **#D97757** — confirmed from Anthropic's official Claude Code skills repo.
+- z.ai **#1F63EC** — the dominant blue in the official `logo.svg`
+  (`https://z-cdn.chatglm.cn/z-ai/static/logo.svg`); the logo has no purple despite the
+  "blue-purple gradient" reputation, which comes from marketing UI.
+- Both written BGR per the existing convention: `col_claude` 0x5777D9, `col_zai` 0xEC631F.
+
+## 4. Reset countdowns — HA template sensors (the timestamp gotcha)
+
+ESPHome's `homeassistant` sensor imports a timestamp entity as an **ISO string** (verified — not
+a usable epoch), so the reset cells can't compute "time until reset" on-device from the raw
+reset-time entities. Chosen approach: HA template sensors that output minutes-to-reset, which
+ESPHome reads as a plain number and formats as `HuMM` (e.g. `1u23`).
+
+- `sensor.your_claude_reset_minutes` ← the Claude session-reset-time entity
+- `sensor.your_zai_reset_minutes` ← the z.ai 5h-reset-time entity
+- Jinja: `{% set r = states('<src>')|as_datetime %}{% if r %}{{ ((r-now()).total_seconds()/60)|round(0)|int }}{% else %}unknown{% endif %}`
+
+Defined in a YAML package (`packages/ai_usage_countdowns.yaml`), written to the HA config SMB
+mount + mirrored in the `hass-ai-usage-monitoring` project. Packages load only at startup, so this
+needs an HA restart (disarm the alarm first — alarm + Telegram + Frigate live on this box, per the
+AI-usage-monitoring caveat). That restart conveniently also drops the CYD's API connection so
+ESPHome re-subscribes and the reset cells populate immediately (no separate device reboot).
+Verified post-restart: `claude_session_minutes_to_reset`=14, `z_ai_5h_minutes_to_reset`=94.
+(The `ha_mcp_tools` services exist over MCP but their returns didn't serialize through the
+wrapper; writing the package file over the SMB mount was the clean path. UI Helpers would also
+have worked without a restart, but the YAML package is reproducible + version-mirrored.)
+
+## 5. Firmware (cyd-ha-control.yaml)
+
+- `col_claude`/`col_zai` BGR substitutions.
+- 4 homeassistant sensors (`claude_5h`, `claude_reset`, `zai_5h`, `zai_reset`), each `on_value`
+  → `lvgl.label.update`; `%` cells `%.0f%%`, reset cells `HuMM`, `isnan(x)`→`--`, negatives clamped to 0.
+- Power card: label removed, h 64, value `CENTER` (**gotcha:** `CENTER_MID` is not a valid LVGL
+  align token — caught at compile; the token is just `CENTER`).
+- AI cells: value `montserrat_24` at `TOP_MID y:0`, caption `montserrat_14` at `BOTTOM_MID y:0`,
+  `pad_all: 0` (see §8). Buttons shifted to y 130 / h 106.
+
+## 6. Secrets
+
+4 new `!secret` entity keys (`claude_5h_entity`, `claude_reset_entity`, `zai_5h_entity`,
+`zai_reset_entity`) in `secrets.yaml` + sanitized `secrets.yaml.example`. Site-specific entity
+IDs (incl. the Claude `david_pro` one) live only in the git-ignored `secrets.yaml`.
+
+## 7. Files Modified
+
+| File | Status |
+|---|---|
+| `cyd-ha-control.yaml` | `col_claude`/`col_zai`; 4 sensors + AI row; power card 64/no-label; buttons shifted |
+| `secrets.yaml` / `secrets.yaml.example` | +4 AI entity keys |
+| `CLAUDE.md` | AI usage row subsection; `col_claude`/`col_zai`; status 2026-06-19; secrets list |
+| `README.md` | Features (AI row); secrets block; gotcha (template/timestamp) |
+| `changelog.md` | This session-7 entry |
+| HA `packages/ai_usage_countdowns.yaml` (+ `hass-ai-usage-monitoring` mirror) | 2 template sensors: minutes-to-reset for Claude + z.ai (loads at HA restart) |
+
+## 8. Layout tuning after first flash (two iterations)
+
+The first flash (cells 74×50, value `montserrat_28`) showed the value and caption **overlapping**
+on every card, plus a faint **grey horizontal strip** along the bottom of each card. Two rounds:
+
+1. Grew cells 50→58 px (taking 8 px from the buttons: 114→106), reduced the value font 28→24
+   (~10% as requested), pinned the number to the cell top. Still overlapped.
+2. Root cause: **LVGL `obj` default padding** — it both shrinks the area children align into (so
+   `TOP_MID`/`BOTTOM_MID` collided) and draws an auto-scrollbar band (the "grey strip") when content
+   nears the padded inset. **Fix: `pad_all: 0`** on each card — documented to remove the `obj`
+   scrollbar band. With padding gone the value anchors to the true top and the caption to the true
+   bottom with a clear gap. (ESPHome LVGL widgets docs; HA community: "Setting `pad_all: 0` removes
+   the scrollbar.")
+
+Final cell layout: `74×58, pad_all: 0`, value `montserrat_24` `TOP_MID y:0`, caption
+`montserrat_14` `BOTTOM_MID y:0`.
+
+## 9. Status
+- ✅ Firmware compiled + OTA-flashed (final layout with `pad_all: 0` addressing the reported overlap + scrollbar band).
+- ✅ HA template sensors live (Claude 14 / z.ai 94 min verified post-restart); CYD re-subscribed on the restart, all 4 cells populated.
+- ✅ Claude values cross-checked against claude.ai → Settings → Usage (agree). z.ai has no public usage dashboard to cross-check; values come from the z.ai API package (`packages/zai_usage.yaml`).
+- Session wrapped via `/finished` after the layout tuning.

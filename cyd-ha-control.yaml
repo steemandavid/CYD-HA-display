@@ -21,6 +21,8 @@ substitutions:
   col_mid: "0xF4A903"       # -> true 0x03A9F4  HA blue (power 200-3000 W + buttons)
   col_high: "0x4417FF"      # -> true 0xFF1744  red    (power >= 3000 W)
   col_btn_bot: "0xD18802"   # -> true 0x0288D1  button gradient bottom
+  col_claude: "0x5777D9"   # -> true 0xD97757  Claude clay (AI usage cells)
+  col_zai: "0xEC631F"      # -> true 0x1F63EC  z.ai blue  (AI usage cells)
 
 esphome:
   name: ${name}
@@ -141,6 +143,60 @@ sensor:
             else
               return lv_color_hex(${col_high});   // red - high (alarm)
 
+  # --- AI usage cells (imported from HA; reset cells are HA templates) ---
+  # Claude 5h % and z.ai 5h % — show "<n>%"; reset cells show "HuMM" countdown.
+  - platform: homeassistant
+    id: claude_5h
+    entity_id: !secret claude_5h_entity
+    on_value:
+      - lvgl.label.update:
+          id: claude_5h_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[10];
+            snprintf(buf, sizeof(buf), "%.0f%%", x);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: claude_reset
+    entity_id: !secret claude_reset_entity
+    on_value:
+      - lvgl.label.update:
+          id: claude_reset_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            int mins = (int) x;
+            if (mins < 0) mins = 0;
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%du%02d", mins / 60, mins % 60);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: zai_5h
+    entity_id: !secret zai_5h_entity
+    on_value:
+      - lvgl.label.update:
+          id: zai_5h_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[10];
+            snprintf(buf, sizeof(buf), "%.0f%%", x);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: zai_reset
+    entity_id: !secret zai_reset_entity
+    on_value:
+      - lvgl.label.update:
+          id: zai_reset_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            int mins = (int) x;
+            if (mins < 0) mins = 0;
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%du%02d", mins / 60, mins % 60);
+            return std::string(buf);
+
 # ---- Over-threshold detection (5 s debounce) -------------------------------
 binary_sensor:
   - platform: template
@@ -192,40 +248,161 @@ lvgl:
     - id: main_page
       bg_color: ${col_bg}
       widgets:
-        # --- Big power readout -------------------------------------------
+        # --- Big power readout (value only; "Verbruik" label dropped) ----
         - obj:
             align: TOP_MID
-            y: 6
+            y: 4
             width: 300
-            height: 96
+            height: 64
             bg_color: ${col_card}
             bg_opa: COVER
             radius: 8
             border_width: 0
+            pad_all: 0
             widgets:
-              - label:
-                  text: "Verbruik"
-                  align: TOP_MID
-                  text_color: ${col_label}
-                  text_font: montserrat_20
               - label:
                   id: power_label
                   text: "-- W"
-                  align: BOTTOM_MID
+                  align: CENTER
                   text_color: 0xFFFFFF
                   text_font: montserrat_48
 
+        # --- AI usage row ------------------------------------------------
+        # Four display-only cells (NOT buttons): cc 5h% | cc reset | z.ai 5h%
+        # | z.ai reset. Each provider gets a 5h-% cell + a reset-countdown
+        # cell. Claude cells = clay (#D97757), z.ai cells = blue (#1F63EC);
+        # the caption also names the provider. Reset cells are HA template
+        # sensors computing minutes-to-reset (ESPHome can't read the ISO
+        # timestamp entities as numbers). 4 x 74 wide, 6px side margins,
+        # 4px gaps; y 70, height 58.
+
+        # --- Cell: Claude 5h % -------------------------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 6
+            y: 70
+            width: 74
+            height: 58
+            bg_color: ${col_claude}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  id: claude_5h_label
+                  text: "--%"
+                  align: TOP_MID
+                  y: 0
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "cc 5h"
+                  align: BOTTOM_MID
+                  y: 0
+                  width: 72
+                  text_align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+
+        # --- Cell: Claude reset ------------------------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 84
+            y: 70
+            width: 74
+            height: 58
+            bg_color: ${col_claude}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  id: claude_reset_label
+                  text: "--"
+                  align: TOP_MID
+                  y: 0
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "cc reset"
+                  align: BOTTOM_MID
+                  y: 0
+                  width: 72
+                  text_align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+
+        # --- Cell: z.ai 5h % ---------------------------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 162
+            y: 70
+            width: 74
+            height: 58
+            bg_color: ${col_zai}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  id: zai_5h_label
+                  text: "--%"
+                  align: TOP_MID
+                  y: 0
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "z.ai 5h"
+                  align: BOTTOM_MID
+                  y: 0
+                  width: 72
+                  text_align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+
+        # --- Cell: z.ai reset --------------------------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 240
+            y: 70
+            width: 74
+            height: 58
+            bg_color: ${col_zai}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  id: zai_reset_label
+                  text: "--"
+                  align: TOP_MID
+                  y: 0
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "z.ai reset"
+                  align: BOTTOM_MID
+                  y: 0
+                  width: 72
+                  text_align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+
         # --- Three tall buttons side by side -----------------------------
-        # Lower area (y 110..230). Each ~100 wide x 116 tall; 6px side margins,
+        # Lower area (y 130..236). Each ~100 wide x 106 tall; 6px side margins,
         # 4px gaps. Labels wrap to fit the narrower width.
 
         # --- Button: garage open -----------------------------------------
         - button:
             align: TOP_LEFT
             x: 6
-            y: 110
+            y: 130
             width: 100
-            height: 116
+            height: 106
             widgets:
               - label:
                   text: "Garage OPENEN"
@@ -243,9 +420,9 @@ lvgl:
         - button:
             align: TOP_LEFT
             x: 110
-            y: 110
+            y: 130
             width: 100
-            height: 116
+            height: 106
             widgets:
               - label:
                   text: "Garage SLUITEN"
@@ -263,9 +440,9 @@ lvgl:
         - button:
             align: TOP_LEFT
             x: 214
-            y: 110
+            y: 130
             width: 100
-            height: 116
+            height: 106
             widgets:
               - label:
                   text: "Deurslot WACHT KAMER"
