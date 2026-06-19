@@ -627,3 +627,50 @@ Final cell layout: `74×58, pad_all: 0`, value `montserrat_24` `TOP_MID y:6`, ca
 - ✅ HA template sensors live (Claude 14 / z.ai 94 min verified post-restart); CYD re-subscribed on the restart, all 4 cells populated.
 - ✅ Claude values cross-checked against claude.ai → Settings → Usage (agree). z.ai has no public usage dashboard to cross-check; values come from the z.ai API package (`packages/zai_usage.yaml`).
 - ✅ Layout confirmed good by user after 3 tuning rounds (overlap → scrollbar band → edge-hugging/excess gap). Final: value `TOP_MID y:6`, caption `BOTTOM_MID y:-6`. Committed as a follow-up after the initial `/finished`.
+
+---
+
+# 2026-06-19 (session 8): Blog post — AI usage row + photos
+
+## Summary
+Updated the steeman.be CYD blog post to document session 7's AI-usage row, added photos, and
+deployed. **No firmware changes** — `cyd-ha-control.yaml` untouched.
+
+## 1. Post content (website-steeman.be)
+- New **"An AI usage row"** section: the cc/z.ai 5h-% + reset-countdown cells, brand colours
+  (Claude clay `#D97757`, z.ai blue `#1F63EC`), with two new gotchas continuing the post's
+  through-line — **"Timestamps — the fifth gotcha"** (ESPHome imports HA timestamp entities as
+  ISO strings → countdowns computed by HA template sensors) and **"LVGL object padding"**
+  (`pad_all: 0` kills the value/caption collision + the grey scrollbar band). Cross-link to the
+  AI-usage-monitoring post.
+- Wove the AI row into the "The firmware" UI description; bumped post date 2026-06-12 →
+  2026-06-19; "270-odd" → "450-odd" lines; added a lessons bullet (watch how ESPHome imports an
+  entity's type) and a Resources cross-link.
+
+## 2. Photos (`static/images/CYD-HA-Display/`)
+| File | Placement |
+|---|---|
+| `cyd-ai-usage-row.jpg` (today — shows the 4 cells) | AI section + hero `image:` |
+| `cyd-power-and-buttons.jpg` | "The firmware" UI shot |
+| `cyd-in-case.jpg` | "Mounting" / 3D-printed case |
+| `cyd-board.png` (bare ESP32-2432S028 render) | "What is a CYD?" intro |
+- Each full + 600 px `thumb`; board thumb saved as **JPEG (39 KB)** — the PNG thumb was 298 KB
+  (RGBA flattened on white, visually identical).
+- Held back `IMG_20260613_191109` (softest, near-duplicate of the other June-13 shots).
+
+## 3. Deploy (steeman.be)
+- `hugo --gc --minify` (143 pages) + `scripts/deploy.sh --no-build` (lftp mirror via `~/.netrc`).
+- Two deploy rounds (second added the board render). Verified live: post + all images HTTP 200.
+- **Gotcha:** steeman.be is CDN-cached (Anubis; `x-cache-status: HIT`). Right after a deploy the
+  bare URL serves the *previous* version for minutes — verify with a `?v=` cache-bust or
+  `Cache-Control: no-cache` header (→ `MISS`, true `last-modified`). Saved to memory
+  `steeman-be-deploy-cache-verification`. Also: Hugo does not clean `public/`, so a renamed
+  thumbnail left an orphan `cyd-board thumb.png` that `lftp -n` re-uploaded; removed it locally +
+  via FTP `DELE` (now 404).
+
+## 4. Files
+| File | Status |
+|---|---|
+| `website-steeman.be/content/posts/turning-…wall-panel.md` | Updated — committed `3c02bb3` → website repo `main` |
+| `website-steeman.be/static/images/CYD-HA-Display/*` | 8 image files added — committed `3c02bb3` |
+| CYD `changelog.md` | This session-8 entry |
