@@ -293,13 +293,13 @@ lvgl:
                   id: claude_5h_label
                   text: "--%"
                   align: TOP_MID
-                  y: 0
+                  y: 6
                   text_color: 0xFFFFFF
                   text_font: montserrat_24
               - label:
                   text: "cc 5h"
                   align: BOTTOM_MID
-                  y: 0
+                  y: -6
                   width: 72
                   text_align: CENTER
                   text_color: 0xFFFFFF
@@ -322,13 +322,13 @@ lvgl:
                   id: claude_reset_label
                   text: "--"
                   align: TOP_MID
-                  y: 0
+                  y: 6
                   text_color: 0xFFFFFF
                   text_font: montserrat_24
               - label:
                   text: "cc reset"
                   align: BOTTOM_MID
-                  y: 0
+                  y: -6
                   width: 72
                   text_align: CENTER
                   text_color: 0xFFFFFF
@@ -351,13 +351,13 @@ lvgl:
                   id: zai_5h_label
                   text: "--%"
                   align: TOP_MID
-                  y: 0
+                  y: 6
                   text_color: 0xFFFFFF
                   text_font: montserrat_24
               - label:
                   text: "z.ai 5h"
                   align: BOTTOM_MID
-                  y: 0
+                  y: -6
                   width: 72
                   text_align: CENTER
                   text_color: 0xFFFFFF
@@ -380,13 +380,13 @@ lvgl:
                   id: zai_reset_label
                   text: "--"
                   align: TOP_MID
-                  y: 0
+                  y: 6
                   text_color: 0xFFFFFF
                   text_font: montserrat_24
               - label:
                   text: "z.ai reset"
                   align: BOTTOM_MID
-                  y: 0
+                  y: -6
                   width: 72
                   text_align: CENTER
                   text_color: 0xFFFFFF

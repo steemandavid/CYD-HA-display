@@ -617,11 +617,13 @@ on every card, plus a faint **grey horizontal strip** along the bottom of each c
    bottom with a clear gap. (ESPHome LVGL widgets docs; HA community: "Setting `pad_all: 0` removes
    the scrollbar.")
 
-Final cell layout: `74×58, pad_all: 0`, value `montserrat_24` `TOP_MID y:0`, caption
-`montserrat_14` `BOTTOM_MID y:0`.
+Final cell layout: `74×58, pad_all: 0`, value `montserrat_24` `TOP_MID y:6`, caption
+`montserrat_14` `BOTTOM_MID y:-6` — a 3rd tuning round nudged both 6 px toward center
+(value ↓6, caption ↑6) to kill the edge-hugging + excess gap left by `pad_all: 0`;
+~6 px top/bottom margins, ~8 px gap between value and caption. Confirmed good by user.
 
 ## 9. Status
 - ✅ Firmware compiled + OTA-flashed (final layout with `pad_all: 0` addressing the reported overlap + scrollbar band).
 - ✅ HA template sensors live (Claude 14 / z.ai 94 min verified post-restart); CYD re-subscribed on the restart, all 4 cells populated.
 - ✅ Claude values cross-checked against claude.ai → Settings → Usage (agree). z.ai has no public usage dashboard to cross-check; values come from the z.ai API package (`packages/zai_usage.yaml`).
-- Session wrapped via `/finished` after the layout tuning.
+- ✅ Layout confirmed good by user after 3 tuning rounds (overlap → scrollbar band → edge-hugging/excess gap). Final: value `TOP_MID y:6`, caption `BOTTOM_MID y:-6`. Committed as a follow-up after the initial `/finished`.
