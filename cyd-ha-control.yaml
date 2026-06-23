@@ -84,6 +84,20 @@ rtttl:
   output: speaker_pwm
   gain: 10%          # GPIO26 amp is loud; tune to taste
 
+# ---- Doorbell chime — triggered from HA via button.press -------------------
+# HA's doorbell automation (id 1686663509022 'TTS: deurbel ingedrukt') presses
+# this button; the CYD answers with a ~3 s 3x ding-dong. RTTTL = melody only
+# (this amp can't play the ESP-221 doorbell MP3).
+#   c6,g5,16p,c6,g5,16p,c6,g5  ->  C6 "ding" -> G5 "dong" (perfect 4th), x3.
+#   Duration @120bpm: 2x(0.5+0.5+0.125) + (0.5+0.5) = 3.25 s.
+button:
+  - platform: template
+    name: "Doorbell Chime"
+    icon: "mdi:bell-ring"
+    on_press:
+      - logger.log: "Doorbell chime (from HA)"
+      - rtttl.play: "Doorbell:d=4,o=5,b=120: c6,g5,16p,c6,g5,16p,c6,g5"
+
 # ---- Display ---------------------------------------------------------------
 display:
   - platform: ili9xxx

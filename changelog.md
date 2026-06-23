@@ -674,3 +674,92 @@ deployed. **No firmware changes** — `cyd-ha-control.yaml` untouched.
 | `website-steeman.be/content/posts/turning-…wall-panel.md` | Updated — committed `3c02bb3` → website repo `main` |
 | `website-steeman.be/static/images/CYD-HA-Display/*` | 8 image files added — committed `3c02bb3` |
 | CYD `changelog.md` | This session-8 entry |
+
+---
+
+# 2026-06-23 (session 9): Doorbell Chime — CYD Plays on Doorbell Press
+
+## Summary
+
+The CYD's speaker now chimes when any of the 4 front-door doorbell buttons
+(`binary_sensor.your_doorbell_1..4` on ESP-209) is pressed. The CYD amp is
+RTTTL-only (no MP3), so it answers with a generated ~3 s **3× ding-dong** rather
+than the doorbell MP3 that ESP-221 plays. The chime is driven from the existing
+HA doorbell automation and is **purely additive** — ESP-221 MP3, Telegram ping,
+and Dutch TTS all stay as-is.
+
+## 1. Design decision (user-chosen)
+
+Two options were offered; user picked **HA-automation-driven + additive**:
+- **HA automation drives the CYD** (not CYD self-subscribing): the CYD exposes a
+  "Doorbell Chime" button; HA presses it.
+- **Keep the ESP-221 chime** (not replace): CYD is an additional chime.
+
+## 2. Firmware (cyd-ha-control.yaml)
+
+Added a template `button` that plays the tune on press:
+
+```yaml
+button:
+  - platform: template
+    name: "Doorbell Chime"
+    icon: "mdi:bell-ring"
+    on_press:
+      - logger.log: "Doorbell chime (from HA)"
+      - rtttl.play: "Doorbell:d=4,o=5,b=120: c6,g5,16p,c6,g5,16p,c6,g5"
+```
+
+Tune: 3× ding-dong — C6 (1047 Hz) "ding" → G5 (784 Hz) "dong" (perfect fourth),
+repeated three times over **~3.25 s** (@120 BPM: 2×(0.5+0.5+0.125) + (0.5+0.5)).
+Three repeats so it's insistent enough to notice, vs. a single easy-to-miss chime.
+No new secrets — the CYD doesn't subscribe to anything; HA tells it when.
+
+Compiled + OTA-flashed with ESPHome 2026.5.3 (`~/esphome-cyd-venv`): 65 s compile,
+8 s OTA to `<CYD_IP>`. Flash 67.8 %. `esphome compile` then `upload --device`
+(not `run` — hangs on the logs prompt).
+
+## 3. HA automation (id `1686663509022` 'TTS: deurbel ingedrukt')
+
+Added `button.press` as the **first action** so the chime fires immediately on
+press (before the ESP-221 play_media sequence + delays):
+
+```yaml
+actions:
+  - target:
+      entity_id: button.your_cyd_doorbell_chime
+    data: {}
+    action: button.press
+  - data: ...            # telegram, esp_221 play_media x4, TTS — unchanged
+```
+
+> **Entity-id gotcha:** the CYD device is registered in HA as
+> `<room>_cyd_control_display` (HA registers it with a location/room prefix), so the
+> button entity is `button.your_cyd_doorbell_chime` — **not**
+> the `button.cyd_control_...` the firmware name alone would suggest. Confirmed
+> by `list_entities`, not assumed.
+
+Backed up `automations.yaml` (`.bak-…-cyd-chime`) before editing; `automation.reload`
+after.
+
+## 4. Verification
+
+- `button.press` on the chime entity returns ok; **user heard the ding-dong** —
+  HA → CYD → rtttl path confirmed end-to-end.
+- `automation.your_doorbell_announcement` reloaded, state `on`.
+
+## 5. Caveat — ESP-209 (doorbell source) offline
+
+`device_tracker.your_doorbell_node` = `unavailable` since 2026-06-22, so the 4 doorbell
+entities are not currently in HA's state machine. The automation (and therefore
+the chime) will fire on a real press the moment ESP-209 is back online. The
+button-press test above proves the CYD half independently.
+
+## 6. Files Modified
+
+| File | Status |
+|---|---|
+| `cyd-ha-control.yaml` | + template `button` "Doorbell Chime" → rtttl 3× ding-dong |
+| HA `automations.yaml` | + `button.press` first action in 'TTS: deurbel ingedrukt' (id 1686663509022); backed up + reloaded |
+| `secrets.yaml` | (unchanged — no new secrets) |
+| `CLAUDE.md` | + Doorbell-chime section + status |
+| `changelog.md` | This session-9 entry |
