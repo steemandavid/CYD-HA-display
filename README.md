@@ -3,7 +3,8 @@
 ESPHome firmware that turns a **Cheap Yellow Display (CYD / ESP32-2432S028)** into a
 wall-mounted control panel for [Home Assistant](https://www.home-assistant.io/). It shows
 live power consumption and provides three touch buttons that toggle Home Assistant switches,
-plus an audible over-power alarm.
+plus an audible over-power alarm. A top-right **Pagina** button flips to a second page showing
+outside and inside temperatures.
 
 ![platform: ESPHome](https://img.shields.io/badge/platform-ESPHome%202026.5-blue)
 ![board: ESP32-2432S028](https://img.shields.io/badge/board-ESP32--2432S028-yellow)
@@ -26,6 +27,10 @@ plus an audible over-power alarm.
   | Deurslot WACHT KAMER | toggles `switch.your_door_lock` |
 - **Over-power alarm** — short repeating beep while power stays **above 3000 W** for 5 s
   (5 s debounce), via the onboard speaker.
+- **Temperature page (multi-page UI)** — tap the top-right **Pagina** button to flip to a
+  second page with two temperatures side by side: **Buiten** (outside) and **Binnen** (inside),
+  each a large readout on a dark card. Tap again to return. The button lives on the `top_layer`,
+  so it shows on every page — adding a third page later is a one-line change.
 
 ## Hardware
 
@@ -96,6 +101,10 @@ claude_5h_entity: sensor.your_claude_5h_usage
 claude_reset_entity: sensor.your_claude_reset_minutes
 zai_5h_entity: sensor.your_zai_5h_quota
 zai_reset_entity: sensor.your_zai_reset_minutes
+
+# Temperature page (page 2)
+temp_outside_entity: sensor.your_outside_temperature
+temp_inside_entity: sensor.your_inside_temperature
 ```
 
 > The `api_encryption_key` must match the key Home Assistant has for this device
@@ -158,6 +167,12 @@ These were hard-won during bring-up — see `CLAUDE.md` for the full story.
   Claude/z.ai reset times) as ISO strings, not numbers, so the reset countdowns are computed by
   HA template sensors (minutes-to-reset) and read in as plain numbers. The brand colours
   (`#D97757` Claude clay, `#1F63EC` z.ai blue) are written BGR like every other `col_*` (above).
+- **Multi-page navigation:** the display has two pages (`main_page`, `temp_page`) flipped by a
+  "Pagina" button on the `top_layer` (LVGL's always-on-top page) via `lvgl.page.next`. Putting
+  the button on `top_layer` is the clean way to have one nav control on every page without
+  repeating it per page. The `°` in the temperatures relies on the built-in Montserrat font
+  (LVGL's default glyph range includes 0xB0); if you ever set a custom `text_font`, add the
+  glyph explicitly or it shows as a box.
 
 ## License
 

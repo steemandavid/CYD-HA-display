@@ -571,7 +571,7 @@ mount + mirrored in the `hass-ai-usage-monitoring` project. Packages load only a
 needs an HA restart (disarm the alarm first — alarm + Telegram + Frigate live on this box, per the
 AI-usage-monitoring caveat). That restart conveniently also drops the CYD's API connection so
 ESPHome re-subscribes and the reset cells populate immediately (no separate device reboot).
-Verified post-restart: `claude_session_minutes_to_reset`=14, `z_ai_5h_minutes_to_reset`=94.
+Verified post-restart: the Claude reset sensor read 14 min, the z.ai reset sensor 94 min.
 (The `ha_mcp_tools` services exist over MCP but their returns didn't serialize through the
 wrapper; writing the package file over the SMB mount was the clean path. UI Helpers would also
 have worked without a restart, but the YAML package is reproducible + version-mirrored.)
@@ -763,3 +763,105 @@ button-press test above proves the CYD half independently.
 | `secrets.yaml` | (unchanged — no new secrets) |
 | `CLAUDE.md` | + Doorbell-chime section + status |
 | `changelog.md` | This session-9 entry |
+
+---
+
+# 2026-06-29 (session 10): Multi-page UI + Temperature Page
+
+## Summary
+
+Restructured the display into **pages**: `main_page` keeps today's content (power + AI row +
+gate buttons), and a new **`temp_page`** shows the two temperatures side by side. A
+**"Pagina" button on the `top_layer`** (always-on-top) is visible on every page; tapping it
+runs `lvgl.page.next` to cycle pages. This makes adding a future 3rd page a one-line append to
+`lvgl: pages:`. The earlier idea (a small temp panel beside the power card) was superseded by
+this page-based approach at the user's request.
+
+Temperatures: outside = `sensor.your_outside_temperature` (Esp-216 "Temperatuur buiten"),
+inside = `sensor.your_inside_temperature` (Esp-213 "binnen"), both °C (~22.8 / 26.6 °C at build time).
+Real entity IDs live only in git-ignored `secrets.yaml`.
+
+## 1. Why pages instead of a side panel
+The user proposed using the new top-right panel as a **page-flip button** rather than a temp
+readout: page 1 = current content, page 2 = temperatures, easily extensible. Cleaner than
+cramming two temps into a 74×64 strip, and it leaves room for more pages later.
+
+## 2. LVGL page navigation (API verified against the ESPHome LVGL cookbook)
+- **`top_layer:`** — a transparent "always-on-top" page; widgets here render on *every* page.
+  The cookbook recommends it specifically to avoid repeating a nav widget on each page. The
+  "Pagina" button lives here → one button, visible/tappable on all pages.
+- **Page actions:** `lvgl.page.next:` / `lvgl.page.previous:` / `lvgl.page.show: <id>`. The
+  button uses `on_short_click` → `lvgl.page.next` (matches the gate buttons' trigger style).
+- **`lvgl: pages:`** is now a list of two (`main_page`, `temp_page`); the first is the boot
+  page. Adding a page = append an entry; the top-layer button keeps cycling.
+
+## 3. Page 1 (`main_page`) — power card shrunk
+Power card `obj` went `TOP_MID w300` → `TOP_LEFT x:6 w230` (x6→236) so the top-right 74×64 is
+clear for the Page button. `power_label` (`montserrat_48`, `CENTER`) re-centres inside 230;
+"12345 W" (~200 px) still fits. AI row (y70) and the three buttons (y130) are unchanged.
+
+## 4. Page 2 (`temp_page`) — two side-by-side cards
+User-approved layout: two `col_card` panels side by side, 152×232 each (6-px margins, 4-px gap
+→ 6+152+4+152+6 = 320).
+- **Buiten** (left, outside): label `montserrat_14` `col_label` at `TOP_LEFT`, value
+  `id=temp_outside_label` `montserrat_40` white `CENTER`.
+- **Binnen** (right, inside): same; label pinned `TOP_LEFT` to clear the floating Page button,
+  value `CENTER` (sits mid-card, *below* the button's y4–68 → no overlap even though both occupy
+  the right card).
+- Value font `montserrat_40` (not 48): 48 was too wide for `-5.0°` in a 152-px card. `montserrat_40`
+  is a real built-in size; ESPHome compiles a built-in font on reference. Fallback if a compile
+  ever rejects it: `montserrat_30` (used in the cookbook). Caught pre-flash, so no OTA wasted.
+
+## 5. ° symbol
+Renders fine — LVGL's built-in Montserrat fonts include 0xB0 (the cookbook thermometer example
+uses `"%.1f°C"` with `montserrat_48`). Only a *custom* ESPHome `text_font` would drop it; none
+here. Format `%.1f°`; `isnan(x)` guard → `--°`.
+
+## 6. Sensors + secrets
+Two `homeassistant` sensors (`temp_outside`, `temp_inside`) mirror the existing AI-cell pattern
+(`on_value` → `lvgl.label.update`, `isnan` guard). They update their `temp_page` labels
+regardless of the active page, so values are current when you flip to page 2. Two new
+`!secret` keys (`temp_outside_entity`, `temp_inside_entity`) in `secrets.yaml` (real
+entity IDs) + sanitized placeholders in `secrets.yaml.example`.
+
+## 7. Files Modified
+
+| File | Status |
+|---|---|
+| `cyd-ha-control.yaml` | + `top_layer` Pagina button (`lvgl.page.next`); `pages:` → `main_page` + `temp_page`; power card 300→230; + 2 temp sensors |
+| `secrets.yaml` | + `temp_outside_entity`, `temp_inside_entity` (real entity IDs) |
+| `secrets.yaml.example` | + the same two keys (placeholders) |
+| `CLAUDE.md` | + "Multi-page UI + Temperature page" section; temp entities in secrets list; status → 2026-06-29 |
+| `README.md` | intro + Features (temp page); secrets example; gotcha (top_layer/`lvgl.page.next`, ° in built-in font) |
+| `changelog.md` | This session-10 entry |
+
+## 8. Toolchain repair — PlatformIO `esptool` (the build detour)
+The first `esphome compile` failed at the final image step with
+`ModuleNotFoundError: No module named 'esptool'` (`*** [.pioenvs/cyd-control/bootloader.bin]
+Error 1`). Root cause: PlatformIO's penv had a **dangling editable install** of `esptool 5.2.0`
+whose target dir `~/.platformio/packages/tool-esptoolpy` no longer existed, so `import esptool`
+resolved to nothing. (Pre-existing breakage — the last flash, 2026-06-23, worked; the package dir
+was deleted sometime after.) **Not** caused by the YAML changes — ESPHome validated the config and
+generated C++ fine; only the `esptool` image-conversion step broke.
+
+Fix:
+```bash
+~/.platformio/penv/bin/python -m pip uninstall -y esptool   # drop the dangling editable record
+~/.platformio/penv/bin/python -m pip install esptool        # real install → esptool 5.3.1
+```
+Verified: `import esptool` → 5.3.1; the build's `esptool.py` wrapper runs (harmless `.py`
+deprecation warning). The recompile then **succeeded** in 30 s. If this recurs, repeat the two
+pip commands.
+
+## 9. Status
+- ✅ **Compiled** (Flash **71.8 %**, up from 67.8 % — `montserrat_40` + page 2 added ~50 KB; RAM
+  15.4 %). Confirms `montserrat_40`, `lvgl.page.next`, `top_layer`, `temp_page`, and the `°`
+  symbol all compiled.
+- ✅ **OTA-flashed** to `<CYD_IP>` (8.7 s); device rebooted and reconnected to HA (its entities —
+  `binary_sensor.…_power_above_threshold`, `light.…_backlight`, `button.werkkamer_…_doorbell_chime`
+  — are back). No regression.
+- ✅ **Temps cross-checked** in HA: outside (Esp-216) **25.6 °C**, inside (Esp-213) **27.2 °C** →
+  page 2 should read `25.6°` / `27.2°`.
+- ✅ **User-confirmed perfect** on the screen: page 1 (power card narrowed, "Pagina" button
+  top-right), tap → page 2 with the two temp cards, `°` renders, tap again → back to page 1
+  (`lvgl.page.next` wraps as expected).

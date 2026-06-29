@@ -20,7 +20,8 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - Repo is **public** at https://github.com/steemandavid/CYD-HA-display
 - No committed file may contain real site-specific data. The firmware pulls entities via
   ESPHome `!secret` (`!secret power_entity`, `garage_open_switch`, `garage_close_switch`,
-  `doorlock_switch`, `claude_5h_entity`, `claude_reset_entity`, `zai_5h_entity`, `zai_reset_entity`);
+  `doorlock_switch`, `claude_5h_entity`, `claude_reset_entity`, `zai_5h_entity`, `zai_reset_entity`,
+  `temp_outside_entity`, `temp_inside_entity`);
   docs use placeholders (`<HA_IP>`, `<CYD_IP>`, `<your-wifi-ssid>`,
   `switch.your_garage_open`, etc.). Real values live only in local `secrets.yaml`.
 - This is a plain (Syncthing-synced) dir with a git repo + GitHub remote — commit/push on changes.
@@ -72,7 +73,16 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - Cells are display-only (not buttons) → touch routing is unaffected.
 - **LVGL `obj` padding gotcha:** the cells need `pad_all: 0`. LVGL `obj` widgets have default padding that both shrinks the area children align into (so a `TOP_MID` value and a `BOTTOM_MID` caption collide) and draws a grey auto-scrollbar band along the bottom. `pad_all: 0` kills both. Final cell layout: 74×58, value `montserrat_24` at `TOP_MID`, caption `montserrat_14` at `BOTTOM_MID`.
 
-## Current Status (2026-06-23)
+### Multi-page UI + Temperature page (2026-06-29)
+- The display is now **multi-page**: `main_page` (power + AI row + gate buttons) and `temp_page` (two side-by-side temperature cards). A **"Pagina" button on the `top_layer`** (always-on-top transparent page; top-right 74×64) is visible/tappable on *every* page; `on_short_click` → `lvgl.page.next` cycles to the next page. Adding a page = append to `lvgl: pages:`; the button keeps cycling through all of them. (`top_layer` is the cookbook's pattern to avoid repeating a nav widget on each page.)
+- **Page-flip actions:** ESPHome LVGL exposes `lvgl.page.next:` / `lvgl.page.previous:` / `lvgl.page.show: <id>`. **Verify:** `lvgl.page.next` must wrap from the last page back to the first — if it doesn't, the last page's button is dead and we switch to an explicit `lvgl.page.show`.
+- **Page 2 (`temp_page`):** `Buiten` (outside, `temp_outside_entity` = `sensor.your_outside_temperature`) and `Binnen` (inside, `temp_inside_entity` = `sensor.your_inside_temperature`) side by side — two 152×232 `col_card` panels (6-px margins, 4-px gap → 6+152+4+152+6 = 320). Value `montserrat_40` white, `align: CENTER` (sits mid-card, *below* the top-right Page button so no overlap; 48 was too wide for `-5.0°` in a 152 px card). Label `montserrat_14` `col_label` at `TOP_LEFT` to clear the button. Format `%.1f°`; `isnan(x)` → `--°`.
+- **Power card shrunk** 300→230 wide, left-aligned (`align: TOP_LEFT, x:6`) on `main_page`, to leave the top-right 74×64 clear for the Page button. `power_label` re-centres inside 230. AI row + buttons unchanged.
+- **° symbol:** renders in the built-in Montserrat fonts (LVGL's default font range includes 0xB0). Only a *custom* ESPHome font would drop it — there is none here. (Cookbook thermometer example uses `"%.1f°C"` with `montserrat_48`.)
+- **Font note:** `montserrat_40` is a real built-in size; ESPHome compiles a built-in font on reference. If a compile ever rejects it, `montserrat_30` (used in the cookbook) is the fallback. Only one new font added → flash is fine (was 67.8 %).
+- Sensors update their `temp_page` labels via `on_value` regardless of the active page, so values are current when you flip to page 2 (same as power/AI on page 1).
+
+## Current Status (2026-06-29)
 - ✅ Display: correct orientation, full 320×240, clear image
 - ✅ Power readout: live kW→W conversion working
 - ✅ Wi-Fi + HA API: connected and stable
@@ -84,8 +94,11 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - ✅ UI & tuning (2026-06-13): **dark theme** (screen `0x101418` + card panel `0x1A2028`); power value **3-tier** — green <200 W, blue 200–3000 W, red ≥3000 W; **colours written BGR** to compensate for the ILI9342 MADCTL red/blue swap (`color_order` is a no-op on the LVGL path — see Display Driver); buttons recolored to Home Assistant blue (`bg_color 0x03A9F4` → grad `0x0288D1`); door-lock label is now `Deurslot WACHT KAMER` (added space wraps cleanly). `buzzer_threshold` lowered 4000→3000 W; rtttl `gain` lowered 60%→10%.
 - ✅ AI usage row (2026-06-19): 4-cell row (`cc 5h`/`cc reset` Claude-clay + `z.ai 5h`/`z.ai reset` z.ai-blue) inserted between the power card and the buttons; power card dropped its "Verbruik" label and shrank 96→64 px, buttons shifted down (y 110→122). `%` cells import HA usage sensors; reset cells import HA template sensors (minutes-to-reset). Cells are display-only — touch unaffected. See "AI usage row".
 - ✅ Doorbell chime (2026-06-23): CYD plays a 3× ding-dong (~3.25 s) on doorbell press — template `button` "Doorbell Chime" in firmware + `button.press` as the first action in the 'TTS: deurbel ingedrukt' automation (id `1686663509022`). Additive — ESP-221 MP3, Telegram, and TTS kept. User confirmed audible. Pending: ESP-209 is currently offline, so real-press triggers wait on its return (test the chime by pressing `button.your_cyd_doorbell_chime` directly).
+- ✅ Multi-page UI + temperature page (2026-06-29): display flips between `main_page` (power/AI/buttons) and a new `temp_page` (Buiten/Binnen temperatures side by side) via a `top_layer` "Pagina" button (`lvgl.page.next`). Power card shrunk 300→230 to clear the button. Temps from `temp_outside_entity` (outside) + `temp_inside_entity` (inside) — real IDs only in git-ignored `secrets.yaml`. Compiled (Flash 71.8 %), OTA-flashed, **user-confirmed perfect** — page flip + `lvgl.page.next` wrap + `°` rendering all good. See "Multi-page UI + Temperature page".
 
 ## ESPHome Environment
 - Venv: `~/esphome-cyd-venv`
 - Version: ESPHome 2026.5.3
 - Serial port: `/dev/ttyUSB0` (first flash only, then OTA)
+- Build/flash: `esphome compile` then `esphome upload … --device <cyd_ip>` (NOT `run` — it hangs on the "show logs?" prompt).
+- **PlatformIO `esptool` breakage (2026-06-29):** a compile failed at `bootloader.bin` with `ModuleNotFoundError: No module named 'esptool'` — the penv had a dangling editable `esptool` install pointing at a deleted `~/.platformio/packages/tool-esptoolpy`. Fix: `~/.platformio/penv/bin/python -m pip uninstall -y esptool && ~/.platformio/penv/bin/python -m pip install esptool` (→ real `esptool 5.3.1`). Repeat if it recurs.

@@ -211,6 +211,35 @@ sensor:
             snprintf(buf, sizeof(buf), "%du%02d", mins / 60, mins % 60);
             return std::string(buf);
 
+  # --- Temperatures (shown on page 2 / temp_page) ---
+  # Outside (Esp-216 "Temperatuur buiten") + inside (Esp-213 "binnen"), °C,
+  # shown to 1 decimal. ° renders in the built-in Montserrat font. The labels
+  # live on temp_page, but on_value updates them regardless of the active page,
+  # so they are current when you flip to page 2.
+  - platform: homeassistant
+    id: temp_outside
+    entity_id: !secret temp_outside_entity
+    on_value:
+      - lvgl.label.update:
+          id: temp_outside_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--°");
+            char buf[10];
+            snprintf(buf, sizeof(buf), "%.1f°", x);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: temp_inside
+    entity_id: !secret temp_inside_entity
+    on_value:
+      - lvgl.label.update:
+          id: temp_inside_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--°");
+            char buf[10];
+            snprintf(buf, sizeof(buf), "%.1f°", x);
+            return std::string(buf);
+
 # ---- Over-threshold detection (5 s debounce) -------------------------------
 binary_sensor:
   - platform: template
@@ -258,15 +287,39 @@ lvgl:
       bg_grad_dir: VER
       radius: 8
       text_color: 0xFFFFFF
+
+  # --- Page-flip button: lives on the top_layer (always-on-top), so it is
+  #     visible/tappable on EVERY page. Tapping cycles to the next page. To add
+  #     a page, just append it to `pages:` below — the button keeps cycling.
+  top_layer:
+    widgets:
+      - button:
+          align: TOP_LEFT
+          x: 240
+          y: 4
+          width: 74
+          height: 64
+          widgets:
+            - label:
+                text: "Pagina"
+                align: CENTER
+                text_color: 0xFFFFFF
+                text_font: montserrat_14
+          on_short_click:
+            - logger.log: "Page button -> next page"
+            - lvgl.page.next:
+
   pages:
     - id: main_page
       bg_color: ${col_bg}
       widgets:
         # --- Big power readout (value only; "Verbruik" label dropped) ----
+        # Width shrunk 300 -> 230 to leave room for the top-right Page button.
         - obj:
-            align: TOP_MID
+            align: TOP_LEFT
+            x: 6
             y: 4
-            width: 300
+            width: 230
             height: 64
             bg_color: ${col_card}
             bg_opa: COVER
@@ -469,3 +522,66 @@ lvgl:
                   action: switch.toggle
                   data:
                     entity_id: !secret doorlock_switch
+
+        # =====================================================================
+        # PAGE 2 — Temperatures: Buiten (outside) | Binnen (inside), side by side
+        # =====================================================================
+
+    - id: temp_page
+      bg_color: ${col_bg}
+      widgets:
+        # --- Card: Buiten (outside temp) — left half --------------------
+        - obj:
+            align: TOP_LEFT
+            x: 6
+            y: 4
+            width: 152
+            height: 232
+            bg_color: ${col_card}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  text: "Buiten"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 6
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: temp_outside_label
+                  text: "--°"
+                  align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_40
+
+        # --- Card: Binnen (inside temp) — right half --------------------
+        # Label pinned TOP_LEFT so it clears the top-right Page button.
+        # Value is CENTER (~mid-card, below the button) so no overlap.
+        - obj:
+            align: TOP_LEFT
+            x: 162
+            y: 4
+            width: 152
+            height: 232
+            bg_color: ${col_card}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  text: "Binnen"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 6
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: temp_inside_label
+                  text: "--°"
+                  align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_40
