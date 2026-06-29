@@ -23,6 +23,7 @@ substitutions:
   col_btn_bot: "0xD18802"   # -> true 0x0288D1  button gradient bottom
   col_claude: "0x5777D9"   # -> true 0xD97757  Claude clay (AI usage cells)
   col_zai: "0xEC631F"      # -> true 0x1F63EC  z.ai blue  (AI usage cells)
+  col_solar: "0x00B5F5"    # -> true 0xF5B800  amber (energy page solar values)
 
 esphome:
   name: ${name}
@@ -156,6 +157,14 @@ sensor:
               return lv_color_hex(${col_mid});   // blue - normal
             else
               return lv_color_hex(${col_high});   // red - high (alarm)
+      # Energy page (page 3) NET readout — same sensor, W (kW x 1000).
+      - lvgl.label.update:
+          id: energy_net_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f W", x * 1000.0f);
+            return std::string(buf);
 
   # --- AI usage cells (imported from HA; reset cells are HA templates) ---
   # Claude 5h % and z.ai 5h % — show "<n>%"; reset cells show "HuMM" countdown.
@@ -239,6 +248,185 @@ sensor:
             char buf[10];
             snprintf(buf, sizeof(buf), "%.1f°", x);
             return std::string(buf);
+
+  # --- Energy page (page 3 / energy_page) ---
+  # Power shown in W (kW-native readings x1000); isnan -> "--" (e.g. offline EV).
+  - platform: homeassistant
+    id: power_avg
+    entity_id: !secret power_avg_entity
+    on_value:
+      - lvgl.label.update:
+          id: energy_avg_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f W", x * 1000.0f);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: solar_power
+    entity_id: !secret solar_power_entity
+    on_value:
+      - lvgl.label.update:
+          id: solar_power_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f W", x);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: solar_solarman
+    entity_id: !secret solar_solarman_entity
+    on_value:
+      - lvgl.label.update:
+          id: solar_solarman_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f W", x * 1000.0f);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: marstek_charge
+    entity_id: !secret marstek_charge_entity
+    on_value:
+      - lvgl.label.update:
+          id: batt_charge_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[16];
+            snprintf(buf, sizeof(buf), "+%.0f W", x);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: marstek_discharge
+    entity_id: !secret marstek_discharge_entity
+    on_value:
+      - lvgl.label.update:
+          id: batt_discharge_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[16];
+            snprintf(buf, sizeof(buf), "-%.0f W", x);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: enyaq_power
+    entity_id: !secret enyaq_power_entity
+    on_value:
+      - lvgl.label.update:
+          id: enyaq_power_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.1f kW", x);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: vin_power
+    entity_id: !secret vin_power_entity
+    on_value:
+      - lvgl.label.update:
+          id: vin_power_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.1f kW", x);
+            return std::string(buf);
+
+  # --- Devices page (page 4 / devices_page) ---
+  - platform: homeassistant
+    id: shelly0_power
+    entity_id: !secret shelly0_power_entity
+    on_value:
+      - lvgl.label.update:
+          id: washer_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f W", x);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: shelly1_power
+    entity_id: !secret shelly1_power_entity
+    on_value:
+      - lvgl.label.update:
+          id: dryer_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f W", x);
+            return std::string(buf);
+
+# ---- Airco modes (page 4 / devices_page) — climate HVAC mode as text -------
+# A climate entity's state is a mode STRING ("cool"/"off"/...), which a numeric
+# `sensor` can't hold — so these come in via the homeassistant text_sensor
+# platform. on_value maps the mode to a short Dutch code + colour.
+text_sensor:
+  - platform: homeassistant
+    id: climate_woonkamer
+    entity_id: !secret climate_woonkamer_entity
+    on_value:
+      - lvgl.label.update:
+          id: ac_woonkamer_label
+          text: !lambda |-
+            if (x == "cool") return std::string("KOEL");
+            if (x == "heat") return std::string("WARM");
+            if (x == "auto") return std::string("AUTO");
+            if (x == "fan_only") return std::string("VENT");
+            if (x == "dry") return std::string("DROOG");
+            if (x == "off") return std::string("UIT");
+            return std::string("--");
+      - lvgl.label.update:
+          id: ac_woonkamer_label
+          text_color: !lambda |-
+            if (x == "cool") return lv_color_hex(${col_mid});
+            if (x == "heat") return lv_color_hex(${col_high});
+            return lv_color_hex(${col_label});
+
+  - platform: homeassistant
+    id: climate_overloop
+    entity_id: !secret climate_overloop_entity
+    on_value:
+      - lvgl.label.update:
+          id: ac_overloop_label
+          text: !lambda |-
+            if (x == "cool") return std::string("KOEL");
+            if (x == "heat") return std::string("WARM");
+            if (x == "auto") return std::string("AUTO");
+            if (x == "fan_only") return std::string("VENT");
+            if (x == "dry") return std::string("DROOG");
+            if (x == "off") return std::string("UIT");
+            return std::string("--");
+      - lvgl.label.update:
+          id: ac_overloop_label
+          text_color: !lambda |-
+            if (x == "cool") return lv_color_hex(${col_mid});
+            if (x == "heat") return lv_color_hex(${col_high});
+            return lv_color_hex(${col_label});
+
+  - platform: homeassistant
+    id: climate_slaapkamer
+    entity_id: !secret climate_slaapkamer_entity
+    on_value:
+      - lvgl.label.update:
+          id: ac_slaapkamer_label
+          text: !lambda |-
+            if (x == "cool") return std::string("KOEL");
+            if (x == "heat") return std::string("WARM");
+            if (x == "auto") return std::string("AUTO");
+            if (x == "fan_only") return std::string("VENT");
+            if (x == "dry") return std::string("DROOG");
+            if (x == "off") return std::string("UIT");
+            return std::string("--");
+      - lvgl.label.update:
+          id: ac_slaapkamer_label
+          text_color: !lambda |-
+            if (x == "cool") return lv_color_hex(${col_mid});
+            if (x == "heat") return lv_color_hex(${col_high});
+            return lv_color_hex(${col_label});
 
 # ---- Over-threshold detection (5 s debounce) -------------------------------
 binary_sensor:
@@ -524,9 +712,355 @@ lvgl:
                     entity_id: !secret doorlock_switch
 
         # =====================================================================
-        # PAGE 2 — Temperatures: Buiten (outside) | Binnen (inside), side by side
+        # PAGE 2 — Energie: NET grid power + solar + battery + 2 EV stop-buttons
+        # power_combined is REUSED (same sensor as the main-page card); the other
+        # 6 readouts are dedicated sensors. EV buttons call switch.turn_off + beep.
         # =====================================================================
+    - id: energy_page
+      bg_color: ${col_bg}
+      widgets:
+        # --- NET card (reuses power_combined; NET + gem side by side, W) -
+        - obj:
+            align: TOP_LEFT
+            x: 6
+            y: 4
+            width: 230
+            height: 54
+            bg_color: ${col_card}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  text: "NET"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 4
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: energy_net_label
+                  text: "-- W"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 20
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "gem"
+                  align: TOP_LEFT
+                  x: 118
+                  y: 4
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: energy_avg_label
+                  text: "-- W"
+                  align: TOP_LEFT
+                  x: 118
+                  y: 20
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
 
+        # --- ZON card (SolarLog + Solarman live solar power, W) ---------
+        - obj:
+            align: TOP_LEFT
+            x: 6
+            y: 62
+            width: 230
+            height: 48
+            bg_color: ${col_card}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  text: "SolarLog"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 4
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: solar_power_label
+                  text: "-- W"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 20
+                  text_color: ${col_solar}
+                  text_font: montserrat_24
+              - label:
+                  text: "Solarman"
+                  align: TOP_LEFT
+                  x: 120
+                  y: 4
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: solar_solarman_label
+                  text: "-- W"
+                  align: TOP_LEFT
+                  x: 120
+                  y: 20
+                  text_color: ${col_solar}
+                  text_font: montserrat_24
+
+        # --- BATT card (charge + / discharge -) --------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 6
+            y: 114
+            width: 230
+            height: 40
+            bg_color: ${col_card}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  text: "BATT"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 13
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: batt_charge_label
+                  text: "+-- W"
+                  align: TOP_LEFT
+                  x: 54
+                  y: 13
+                  text_color: ${col_low}
+                  text_font: montserrat_14
+              - label:
+                  text: "/"
+                  align: TOP_LEFT
+                  x: 116
+                  y: 13
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: batt_discharge_label
+                  text: "-- W"
+                  align: TOP_LEFT
+                  x: 126
+                  y: 13
+                  text_color: ${col_mid}
+                  text_font: montserrat_14
+
+        # --- EV stop-buttons (red; turn_off + beep) ----------------------
+        - button:
+            align: TOP_LEFT
+            x: 6
+            y: 158
+            width: 152
+            height: 78
+            bg_color: ${col_high}
+            bg_grad_color: ${col_high}
+            bg_grad_dir: VER
+            radius: 8
+            widgets:
+              - label:
+                  text: "Enyaq"
+                  align: TOP_MID
+                  y: 6
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+              - label:
+                  id: enyaq_power_label
+                  text: "-- kW"
+                  align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "STOP"
+                  align: BOTTOM_MID
+                  y: -6
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+            on_short_click:
+              - logger.log: "EV stop: Enyaq -> switch.turn_off enyaq_charge_switch"
+              - homeassistant.action:
+                  action: switch.turn_off
+                  data:
+                    entity_id: !secret enyaq_charge_switch
+              - rtttl.play: "beep:d=4,o=5,b=100:16e6"
+
+        - button:
+            align: TOP_LEFT
+            x: 162
+            y: 158
+            width: 152
+            height: 78
+            bg_color: ${col_high}
+            bg_grad_color: ${col_high}
+            bg_grad_dir: VER
+            radius: 8
+            widgets:
+              - label:
+                  text: "ID.4"
+                  align: TOP_MID
+                  y: 6
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+              - label:
+                  id: vin_power_label
+                  text: "-- kW"
+                  align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "STOP"
+                  align: BOTTOM_MID
+                  y: -6
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+            on_short_click:
+              - logger.log: "EV stop: Vin -> switch.turn_off vin_charge_switch"
+              - homeassistant.action:
+                  action: switch.turn_off
+                  data:
+                    entity_id: !secret vin_charge_switch
+              - rtttl.play: "beep:d=4,o=5,b=100:16e6"
+
+        # =====================================================================
+        # PAGE 3 — Apparaten: washing machine + dryer + 3 AC modes
+        # =====================================================================
+    - id: devices_page
+      bg_color: ${col_bg}
+      widgets:
+        # --- Wasmachine card (left) --------------------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 6
+            y: 4
+            width: 152
+            height: 66
+            bg_color: ${col_card}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  text: "Wasmachine"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 6
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: washer_label
+                  text: "-- W"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 34
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+
+        # --- Droogkast card (right) — caption+value TOP_LEFT to clear the
+        #     top-right Page button (same idea as temp_page's Binnen card). ---
+        - obj:
+            align: TOP_LEFT
+            x: 162
+            y: 4
+            width: 152
+            height: 66
+            bg_color: ${col_card}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  text: "Droogkast"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 6
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: dryer_label
+                  text: "-- W"
+                  align: TOP_LEFT
+                  x: 8
+                  y: 34
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+
+        # --- AIRCO card (3 mode readouts) --------------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 6
+            y: 76
+            width: 308
+            height: 160
+            bg_color: ${col_card}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  text: "AIRCO"
+                  align: TOP_LEFT
+                  x: 10
+                  y: 8
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  text: "Woonkamer"
+                  align: TOP_LEFT
+                  x: 14
+                  y: 44
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: ac_woonkamer_label
+                  text: "--"
+                  align: TOP_LEFT
+                  x: 230
+                  y: 36
+                  text_color: ${col_label}
+                  text_font: montserrat_24
+              - label:
+                  text: "Overloop"
+                  align: TOP_LEFT
+                  x: 14
+                  y: 82
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: ac_overloop_label
+                  text: "--"
+                  align: TOP_LEFT
+                  x: 230
+                  y: 74
+                  text_color: ${col_label}
+                  text_font: montserrat_24
+              - label:
+                  text: "Slaapkamer"
+                  align: TOP_LEFT
+                  x: 14
+                  y: 120
+                  text_color: ${col_label}
+                  text_font: montserrat_14
+              - label:
+                  id: ac_slaapkamer_label
+                  text: "--"
+                  align: TOP_LEFT
+                  x: 230
+                  y: 112
+                  text_color: ${col_label}
+                  text_font: montserrat_24
+
+        # =====================================================================
+        # PAGE 4 — Temperatures: Buiten (outside) | Binnen (inside), side by side
+        # (moved to last in the cycle on user request — main → Energie → Apparaten → here)
+        # =====================================================================
     - id: temp_page
       bg_color: ${col_bg}
       widgets:

@@ -865,3 +865,118 @@ pip commands.
 - ✅ **User-confirmed perfect** on the screen: page 1 (power card narrowed, "Pagina" button
   top-right), tap → page 2 with the two temp cards, `°` renders, tap again → back to page 1
   (`lvgl.page.next` wraps as expected).
+
+# 2026-06-29 (session 11): Energy & Devices pages — full house energy monitor
+
+## Summary
+Added two more pages so the CYD can **monitor the house's energy usage**. The Pagina button now
+cycles **4** pages: main → temp → **Energie** (page 3) → **Apparaten** (page 4) → main. Page 3
+shows grid net power (+ average), solar (live + today), home-battery charge/discharge, and two
+**EV stop-buttons** (tap = stop charging + beep). Page 4 shows washer/dryer power + 3 airco
+modes. User chose **two sub-pages** (one readable 320×240 screen can't hold 13 readouts + 2
+buttons + 3 chips) and **direct stop + beep** for the EV buttons (no confirm).
+
+## 1. Entities & units — confirmed live via HA before formatting
+Every entity's `unit_of_measurement` was read from HA (don't assume kW/W):
+
+| Readout | Secret key (see `secrets.yaml.example`) | Unit |
+|---|---|---|
+| NET | `power_entity` (reused) | kW |
+| NET gem. | `power_avg_entity` | kW |
+| SolarLog | `solar_power_entity` | W |
+| Solarman | `solar_solarman_entity` | kW |
+| Batt laadt | `marstek_charge_entity` | W |
+| Batt levert | `marstek_discharge_entity` | W |
+| Enyaq | `enyaq_power_entity` | kW |
+| ID.4 | `vin_power_entity` | kW (**unavailable**) |
+| Wasmachine | `shelly0_power_entity` | W |
+| Droogkast | `shelly1_power_entity` | W |
+| Airco ×3 | `climate_woonkamer/overloop/slaapkamer_entity` | mode str |
+
+**All power figures shown in W** — NET, the average, and the Solarman solar reading are
+kW-native × 1000 → W (matching the main power card); SolarLog + battery + Shelly are already W.
+The `ZON` card now shows **two live solar readings** (SolarLog + Solarman) instead of live +
+today. `isnan(x)` → `--`, which covers the unavailable ID.4 EV (`vin_*` entities).
+
+## 2. Reuse — NET is the existing power sensor
+The entity behind `!secret power_entity` is already the main-page power sensor (ESPHome
+`id: power_combined`). Rather than duplicate it, a 2nd `lvgl.label.update: id: energy_net_label`
+was added to its `on_value` — one sensor feeds both the main-page W card and the Energie kW
+readout. No new secret key for it.
+
+## 3. Climates via `text_sensor` (firmware's first)
+A climate entity's state is a mode *string* (`cool`/`off`/…), which the numeric `homeassistant`
+`sensor` can't hold (→ `NaN`). Added a new top-level `text_sensor:` block with 3
+`platform: homeassistant` entries; `on_value` (`x` is `std::string`) maps mode → Dutch code
+(`KOEL`/`WARM`/`AUTO`/`VENT`/`DROOG`/`UIT`) + colour (cool=`col_mid`, heat=`col_high`,
+else=`col_label`). This is the string-state analogue of the AI-row timestamp gotcha — verified
+the platform compiles and all 3 subscribe at boot (it does).
+
+## 4. EV stop-buttons (page 3)
+Two red (`col_high`) buttons, each showing the charger's live kW + a `STOP` label.
+`on_short_click`: `logger.log` + `homeassistant.action: action: switch.turn_off` (NOT `toggle`)
++ `rtttl.play "beep:d=4,o=5,b=100:16e6"` (same beep note as `beep_loop`). Direct stop, no
+confirm (user-chosen). Same action path as the gate buttons; the per-device "Allow the device to
+perform Home Assistant actions" toggle is already ON.
+
+## 5. Layout
+- **Page 3 `energy_page`:** NET card (w230, clears top-right Pagina) + ZON card + BATT card +
+  2 EV buttons (152×78, y158).
+- **Page 4 `devices_page`:** Wasmachine/Droogkast cards (152×66) + full-width AIRCO card
+  (308×160, 3 mode rows).
+- Right-side cards pin caption+value `TOP_LEFT` to clear the Pagina button (a centred value in a
+  short card sits under the button) — same trick as `temp_page`'s Binnen card.
+- One new BGR colour `col_solar` (`0x00B5F5` → true `0xF5B800` amber). Battery charge=`col_low`
+  green, discharge=`col_mid` blue. **No new fonts** (reuses `montserrat_14`/`_24`).
+
+## 6. Secrets
+15 new keys in `secrets.yaml` (real) + `secrets.yaml.example` (placeholders): 9 sensors, 2 EV
+switches, 3 climates. `power_combined` reuses `power_entity`.
+
+## 7. Files modified
+| File | Change |
+|---|---|
+| `cyd-ha-control.yaml` | `col_solar` sub; reuse `power_combined` + 9 new sensors; `text_sensor`×3; `energy_page` + `devices_page` |
+| `secrets.yaml` / `secrets.yaml.example` | +15 keys |
+| `CLAUDE.md`, `README.md` | new pages, features, secrets, gotchas |
+| `changelog.md` | this session 11 |
+
+## 8. Status
+- ✅ **Compiled** (Flash **72.4 %**, +0.6 from 71.8; RAM 15.9 %). No new fonts. The `text_sensor`
+  platform compiled clean.
+- ✅ **OTA-flashed** to `<CYD_IP>` (8.8 s); clean boot ("Boot seems successful; resetting boot
+  loop counter"), no errors.
+- ✅ **Boot log confirms wiring:** all 9 new sensors (`power_avg`, `solar_power`, `solar_solarman`,
+  `marstek_charge/discharge`, `enyaq_power`, `vin_power`, `shelly0/1_power`) + the reused
+  `power_combined` AND all 3 `homeassistant.text_sensor`s (`climate_woonkamer/overloop/slaapkamer`)
+  subscribed and receiving states (e.g. `power_combined: -2.29` kW, exporting on a sunny day).
+- ⏳ **Visual/tap verification pending user:** 4-page cycle wrap; AC chips render `KOEL` (all 3
+  currently `cool`); EV stop-tap — **test the ID.4 (`vin_*`) button first** (its switch is
+  `unavailable`, so `switch.turn_off` is a HA no-op → safe to confirm the log + beep fire);
+  leave the Enyaq (charging at 5.5 kW) for a deliberate stop. That stop-button is labelled
+  **`ID.4`** (a VW ID.4).
+
+# 2026-06-29 (session 12): Move temperature page to last in the cycle
+
+## Summary
+User asked to make the temperature page the **last** page. The Pagina button cycles pages in
+`lvgl: pages:` list order, so this was a reorder of that list — no nav logic change. Cycle is now
+**main → Energie → Apparaten → temp → main** (was main → temp → Energie → Apparaten → main).
+
+## Change
+`cyd-ha-control.yaml` `pages:` block: moved the `temp_page` definition from position 2 (just after
+`main_page`) to the end (after `devices_page`). Renumbered the in-file `PAGE N` comment headers to
+match the new order (Energie=2, Apparaten=3, Temperatures=4). Pure move — no widget/sensor changes,
+so flash stayed 72.4 %.
+
+## Doc cleanup
+Dropped hard-coded page numbers from the secrets section comments (both `secrets.yaml` and
+`.example`) and README — they now say `(energy_page)` / `(devices_page)` / `(temp_page)` instead of
+`(page N)`, so they won't go stale on future reorders. Updated CLAUDE.md + README cycle-order /
+page-number references to the new order. (Sessions 10–11 changelog entries left as-is — they're an
+accurate historical record of the order at those sessions.)
+
+## Status
+- ✅ Compiled (Flash 72.4 %) + OTA-flashed to `<CYD_IP>`; clean boot, no errors.
+- ⏳ **User to confirm** the Pagina button now lands on Energie (not temperatures) after the main
+  page, and reaches temperatures last.
