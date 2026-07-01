@@ -36,7 +36,8 @@ with stop-buttons), and **devices** (appliances + airco modes).
   two solar power readings (SolarLog + Solarman, W), home-battery charge/discharge, and two
   **EV stop-buttons**: each shows the car's charging power and, on tap, calls `switch.turn_off`
   on the charger and plays a short beep. NET, the average, and the Solarman solar reading are
-  kW-native × 1000 → W; the rest are already W.
+  kW-native × 1000 → W; the rest are already W. A small **light toggle** button (`VS4-V1`) fills
+  the top-right gap under the Pagina button — tap toggles `switch.verlichting_vs4_v1`.
 - **Devices page** — washing-machine & dryer live power, plus the current mode of three
   air conditioners (`KOEL` / `WARM` / `UIT` …), coloured by mode.
 
@@ -124,6 +125,7 @@ enyaq_power_entity: sensor.your_ev1_charging_power
 vin_power_entity: sensor.your_ev2_charging_power
 enyaq_charge_switch: switch.your_ev1_charging     # stop-button -> switch.turn_off
 vin_charge_switch: switch.your_ev2_charging       # stop-button -> switch.turn_off
+verlichting_vs4_switch: switch.your_lighting_vs4  # light toggle (top-right gap on energy page)
 
 # Devices page (devices_page)
 shelly0_power_entity: sensor.your_washer_power

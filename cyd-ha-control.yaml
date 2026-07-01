@@ -851,6 +851,28 @@ lvgl:
                   text_color: ${col_mid}
                   text_font: montserrat_14
 
+        # --- Light toggle (fills the square gap under the Pagina button,
+        #     right of the ZON/BATT cards) — toggles a lighting switch.
+        #     74x74 square aligned with the Pagina button's width/x. -----
+        - button:
+            align: TOP_LEFT
+            x: 240
+            y: 70
+            width: 74
+            height: 74
+            widgets:
+              - label:
+                  text: "VS4-V1"
+                  align: CENTER
+                  width: 64
+                  text_align: CENTER
+            on_short_click:
+              - logger.log: "Button: VS4-V1 -> toggle verlichting_vs4_switch"
+              - homeassistant.action:
+                  action: switch.toggle
+                  data:
+                    entity_id: !secret verlichting_vs4_switch
+
         # --- EV stop-buttons (red; turn_off + beep) ----------------------
         - button:
             align: TOP_LEFT

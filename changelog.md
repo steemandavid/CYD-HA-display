@@ -980,3 +980,101 @@ accurate historical record of the order at those sessions.)
 - ✅ Compiled (Flash 72.4 %) + OTA-flashed to `<CYD_IP>`; clean boot, no errors.
 - ⏳ **User to confirm** the Pagina button now lands on Energie (not temperatures) after the main
   page, and reaches temperatures last.
+
+---
+
+# 2026-07-01 (session 13): Energy page — light-toggle button (VS4-V1)
+
+## Summary
+
+Added a **light-toggle button** to the Energie page (`energy_page`), filling the small square
+gap directly under the always-on-top **Pagina** button and to the right of the ZON / BATT cards.
+A tap toggles `switch.verlichting_vs4_v1` (blind toggle, same path as the garage/door-lock
+buttons). User confirmed it works, then asked to shorten the on-screen label
+"Verlichting VS4" → **"VS4-V1"**. All work over OTA at `<CYD_IP>`.
+
+## System Info
+- **CYD device (OTA target):** `192.168.1.74`
+- **HA instance:** `steemanha.duckdns.org` (Proxmox VM at `192.168.1.199`)
+- **ESPHome:** 2026.5.3, venv at `~/esphome-cyd-venv`
+
+## 1. The gap (placement analysis)
+On `energy_page` the layout is all left-stacked cards (x 6–236): NET (y4 h54), ZON (y62 h48),
+BATT (y114 h40), then two EV stop-buttons (y158 h78). The Pagina button (on `top_layer`) sits
+top-right at `x:240, y:4, w:74, h:64` (y 4→68). So below it (y > 68) the right strip
+x:240–314 is empty down to the EV buttons (y 158) — a ~74 × 90 free zone. A **74 × 74 square**
+at `x:240, y:70` fills it cleanly: matches the Pagina button's width and 6-px right margin,
+sits beside both the ZON and BATT cards, leaves a 14-px gap above the EV buttons.
+
+## 2. The button (firmware)
+A plain `- button:` (inherits the global HA-blue button theme, like the gate buttons — no
+colour override). Label `montserrat_14`, `width: 64`, `text_align: CENTER` so it wraps. Action
+is the proven gate-button chain: `on_short_click` → `logger.log` + `homeassistant.action:
+switch.toggle` on `!secret verlichting_vs4_switch`.
+
+```yaml
+- button:
+    align: TOP_LEFT
+    x: 240
+    y: 70
+    width: 74
+    height: 74
+    widgets:
+      - label:
+          text: "VS4-V1"
+          align: CENTER
+          width: 64
+          text_align: CENTER
+    on_short_click:
+      - logger.log: "Button: VS4-V1 -> toggle verlichting_vs4_switch"
+      - homeassistant.action:
+          action: switch.toggle
+          data:
+            entity_id: !secret verlichting_vs4_switch
+```
+
+Design choices (deliberate, matching existing conventions):
+- **Blind toggle, no state feedback** — the garage/door-lock buttons don't reflect on/off
+  either; a light could, but that's a separate feature (state would need a `binary_sensor`
+  subscription + colour update). Kept consistent + simple.
+- **No beep** — beeps are reserved for the destructive EV *stop* actions; a benign light
+  toggle is silent, like the gate buttons.
+- **Action-only** → no `homeassistant` sensor to subscribe, so (like the gate buttons) it
+  produces no boot-log line.
+
+## 3. Label iteration
+First flash labelled the button **"Verlichting VS4"** (wraps to 2 lines in the 64-px label).
+User confirmed the toggle works, then asked to shorten it to **"VS4-V1"** (fits one line).
+Both the label `text:` and the matching `logger.log` string were changed together (the gate
+buttons keep label and log in sync; did the same here).
+
+## 4. Secrets (public-repo convention)
+`switch.verlichting_vs4_v1` is a real entity → must be a `!secret`, never inline in the
+committed firmware. New key in both the real (git-ignored) and sanitized files:
+- `secrets.yaml`: `verlichting_vs4_switch: switch.verlichting_vs4_v1`
+- `secrets.yaml.example`: `verlichting_vs4_switch: switch.your_lighting_vs4`
+
+## 5. Verification
+- ✅ **Compiled** (Flash **72.4 %**, unchanged — no new fonts/sensors; the button reuses the
+  existing theme). RAM 15.9 %.
+- ✅ **OTA-flashed** twice (initial + label change), 8.6 s each, `OTA successful`.
+- ✅ **Clean boot** (log captured via `esphome logs`): API connected in 0.080 s, Wi-Fi
+  `Connected: YES`, Noise encryption on, all sensors streaming live state
+  (`power_combined -0.27`, `solarman 1.86`, `outside_temperature 25.38`, …), **no errors /
+  no boot loop**.
+- ✅ **User-confirmed working** — button renders top-right on page 2 and toggles the light.
+
+> **HA-MCP caveat:** `get_state` / `list_entities` on `switch.verlichting_vs4_v1` returned only
+> `1` — the known HA-MCP return-serialization issue (see session 7's AI-countdowns work). So the
+> target entity's existence couldn't be confirmed programmatically; the user's tap test doubled
+> as that confirmation.
+
+## 6. Files modified
+| File | Change |
+|---|---|
+| `cyd-ha-control.yaml` | + light-toggle `button` on `energy_page` (`x:240 y:70 74×74`, `switch.toggle`); label `VS4-V1` |
+| `secrets.yaml` | + `verlichting_vs4_switch: switch.verlichting_vs4_v1` (real) |
+| `secrets.yaml.example` | + `verlichting_vs4_switch: switch.your_lighting_vs4` (placeholder) |
+| `CLAUDE.md` | + light-toggle bullet (energy page), layout note, secrets count, status line (2026-07-01) |
+| `README.md` | Features bullet (light toggle on energy page) + secrets example key |
+| `changelog.md` | This session-13 entry |
