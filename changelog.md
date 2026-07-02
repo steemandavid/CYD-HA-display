@@ -1078,3 +1078,248 @@ committed firmware. New key in both the real (git-ignored) and sanitized files:
 | `CLAUDE.md` | + light-toggle bullet (energy page), layout note, secrets count, status line (2026-07-01) |
 | `README.md` | Features bullet (light toggle on energy page) + secrets example key |
 | `changelog.md` | This session-13 entry |
+
+---
+
+# 2026-07-02 (session 14): Devices page — tappable AC mode toggle (cool/heat/off)
+
+## Summary
+Made each of the 3 AC status readouts on `devices_page` (Apparaten) **tappable**. A tap
+**cycles cool → heat → off → cool** and calls HA `climate.set_hvac_mode`. The status text
+itself is visually unchanged — the tap is captured by transparent overlay `button`s sitting
+over the existing labels. No new secrets, no new fonts. All work over OTA at `192.168.1.74`.
+
+## System Info
+- **CYD device (OTA target):** `192.168.1.74`
+- **HA instance:** Proxmox VM at `192.168.1.199`
+- **ESPHome:** 2026.5.3, venv at `~/esphome-cyd-venv`
+- **ACs:** Midea units — `climate.midea_ac_*` (woonkamer/overloop/slaapkamer)
+
+## 1. Approach — overlay button, not label conversion
+The status readouts are plain `label:` widgets whose `id`s (`ac_woonkamer_label` etc.) the
+`text_sensor` `on_value` updates (text + colour). Rather than convert a label to a clickable
+widget (and lose the clean `lvgl.label.update` path), a **transparent `- button:`** is laid
+*over* each label:
+
+```yaml
+- button:
+    align: TOP_LEFT
+    x: 200          # card-relative; covers the status text at x:230
+    y: 32           # 32 / 70 / 108 for the 3 rows
+    width: 108
+    height: 36
+    bg_opa: TRANSP  # invisible — the label shows through
+    border_width: 0
+    on_short_click: [ ... cycle cool/heat/off ... ]
+```
+
+- `bg_opa: TRANSP` + `border_width: 0` → visually identical to before; only the hit area +
+  LVGL press-feedback are added. The label keeps its `id`, so the `text_sensor` update is
+  **untouched**.
+- Buttons are declared *after* the labels in the AIRCO card's `widgets:` list → render on top
+  → capture taps. (LVGL also skips non-clickable labels during hit-testing, so order is
+  belt-and-braces.)
+- Placement clears the top-right **Pagina** button: Pagina covers abs y:4–68; the AC rows sit
+  at abs y≈108+ (card at y:76 + row offsets), so no tap-theft.
+
+## 2. The cycle — secret-safe branching
+`on_short_click` cycles cool → heat → off → cool via `climate.set_hvac_mode`. The wrinkle:
+**`entity_id` must stay a static `!secret`.** ESPHome `!secret`s resolve at YAML-load time;
+they are *not* available inside a `!lambda` (the lambda body is verbatim C++). And
+`homeassistant.action`'s `data:` can't mix a static `entity_id` with one templated `hvac_mode`.
+So the next mode is selected by an `if` / `else if` / `else` chain on the text_sensor's
+current state, each branch carrying a fully static `data:` block:
+
+```yaml
+- if:
+    condition:
+      lambda: return id(climate_woonkamer).state == "cool";
+    then:
+      - homeassistant.action:
+          action: climate.set_hvac_mode
+          data: { entity_id: !secret climate_woonkamer_entity, hvac_mode: "heat" }
+  else:
+    - if:
+        condition: { lambda: return id(climate_woonkamer).state == "heat"; }
+        then:
+          - homeassistant.action: { action: climate.set_hvac_mode,
+              data: { entity_id: !secret climate_woonkamer_entity, hvac_mode: "off" } }
+        else:
+          - homeassistant.action: { action: climate.set_hvac_mode,
+              data: { entity_id: !secret climate_woonkamer_entity, hvac_mode: "cool" } }
+```
+
+(In the firmware itself the `data:` blocks are written block-style, not flow-style — flow +
+`!secret` is parser-finicky; block form is safe. Shown flow-style here for brevity.)
+
+- Cycle: **cool → heat → off → cool**. Any non-cool/non-heat state (auto/vent/dry/off/`--`) →
+  cool.
+- **No optimistic flip** — the label updates from the climate's confirmed state (HA pushes the
+  new mode back through the `text_sensor`), so the readout never shows a mode the AC rejected.
+  The button press animation gives immediate feedback in the meantime.
+- 3 ACs (woonkamer/overloop/slaapkamer) → 3 identical button blocks, differing only in id /
+  secret / y.
+
+## 3. Files modified
+| File | Change |
+|---|---|
+| `cyd-ha-control.yaml` | + 3 transparent overlay `button`s on `devices_page` AIRCO card; each `on_short_click` cycles cool/heat/off via `climate.set_hvac_mode` (secret-safe `if`-branching) |
+| `CLAUDE.md` | + "AC mode toggle" bullet (devices page) + status line (2026-07-02) |
+| `README.md` | Devices-page feature bullet now notes the AC readouts are tappable |
+| `changelog.md` | This session-14 entry |
+
+No `secrets.yaml` / `secrets.yaml.example` change — the climate entity keys already exist.
+
+## 4. Status
+- ✅ **Compiled** (Flash **72.6 %**, +0.2 from 72.4; RAM 16.3 %). No new fonts. The `if`-branch
+  + lambda-condition + `!secret`-in-`data` structure all validated. `esptool 5.3.1` held up
+  (no PlatformIO breakage this time).
+- ✅ **OTA-flashed** to `192.168.1.74` (9.0 s); `OTA successful`.
+- ✅ **Clean boot** (log via `esphome logs`): API connected in 0.10 s, Wi-Fi Connected: YES,
+  all sensors + **all 3 `homeassistant.text_sensor`s** (`climate_woonkamer`/`overloop`/
+  `slaapkamer` → `climate.midea_ac_*`) subscribed and streaming live state; only the two
+  benign `[W][app]` chip-rev/SRAM1 advisory lines, no errors / no boot loop.
+- ⏳ **Tap verification pending user:** tap a `KOEL` readout → should flip to `WARM` (heat) and
+  the Midea AC should switch to heating; tap again → `UIT` (off); again → `KOEL`. The Midea
+  climates support cool/heat/off, so all three branches are valid targets.
+
+## 5. Follow-up — WARM overflow fix (same session)
+User reported that switching an AC to `WARM` made the text run off the right edge and the
+AIRCO card showed a scrollbar. Cause: the status labels were at card-relative `x: 230`, leaving
+only 78 px to the card's right edge (308) — the wide **W** in `WARM` (and `DROOG`/`AUTO`)
+overflowed it, and the AIRCO card `obj` drew a scrollbar (latent until the toggle first set
+heat mode; the ACs had always been cooling, so `WARM` was never rendered before). Fix: moved
+the 3 status labels `x: 230 → x: 200`, aligning them under the existing tap buttons (which
+were already at x:200, width:108) — ~108 px of room, no button change needed. Recompiled +
+OTA-flashed (Flash 72.6 %), clean boot, 0 errors, all 3 climates subscribed.
+
+---
+
+# 2026-07-02 (session 15): Auditive feedback — all action buttons beep on tap
+
+## Summary
+Every interactive button now plays a short beep on tap, matching the Enyaq/Vin EV stop-buttons.
+Added `rtttl.play "beep:d=4,o=5,b=100:16e6"` (an E6 16th-note — the same note as the `beep_loop`
+over-power alarm) as the **last** `on_short_click` action to: Garage OPENEN, Garage SLUITEN,
+Deurslot WACHT KAMER, VS4-V1, and the 3 AC mode toggles. The 2 EV stop-buttons already had it.
+The **Pagina** page-flip button is intentionally **excluded** (no beep on every page change).
+This broadens the old "beeps reserved for destructive EV stops" convention.
+
+## 1. The beep
+`rtttl.play: "beep:d=4,o=5,b=100:16e6"` — a single E6 (~1319 Hz) 16th-note at 100 BPM (~150 ms).
+Same string already used by `beep_loop` (the >3000 W alarm) and the Enyaq/Vin buttons, so the
+note + gain (10 %) are consistent device-wide. Placed **last** in each `on_short_click` (after
+the `homeassistant.action`), matching the EV buttons' order — the action fires off to HA, then
+the beep gives immediate feedback.
+
+## 2. Buttons updated (7) + already-had-it (2) + excluded (1)
+| Button | Before | After |
+|---|---|---|
+| Garage OPENEN / SLUITEN / Deurslot | silent | + beep |
+| VS4-V1 (light toggle) | silent | + beep |
+| AC Woonkamer / Overloop / Slaapkamer | silent | + beep (after the cool/heat/off `if`) |
+| Enyaq / Vin EV stop | beep | unchanged |
+| **Pagina** (page flip) | silent | **silent** (excluded) |
+
+## 3. Implementation notes
+- Switch buttons (garage / deurslot / VS4): beep appended at 14-space indent (their
+  `on_short_click` items live at 14).
+- AC buttons: beep appended at 20-space indent (deeper — nested inside the AIRCO card). A single
+  `replace_all` on `hvac_mode: "cool"` added it after all 3 AC `if`/else blocks at once, since
+  they share an identical final `cool` branch.
+- **Typo caught before flashing:** the first Deurslot edit wrote `b:100` (colon) instead of
+  `b=100`. RTTTL's header is `key=value` pairs comma-separated, then a `:` before the melody — a
+  `b:100` would malform the header. Fixed and grepped to confirm no `b:100` remains.
+
+## 4. Files modified
+| File | Change |
+|---|---|
+| `cyd-ha-control.yaml` | + `rtttl.play "beep:…"` to 7 buttons' `on_short_click` (last action) |
+| `CLAUDE.md` | + "Tap feedback — all action buttons beep" bullet; VS4 bullet no longer says "no beep"; status line (2026-07-02) |
+| `changelog.md` | This session-15 entry |
+
+No `secrets.yaml` / firmware-logic change — purely additive audio feedback.
+
+## 5. Status
+- ✅ **Compiled** (Flash **72.6 %**, unchanged — adding `rtttl.play` actions adds ~0). RAM 16.3 %.
+- ✅ **OTA-flashed** to `192.168.1.74` (9.3 s); `OTA successful`.
+- ✅ **Clean boot** (log via `esphome logs`): API connected in 0.12 s; the only beep-related lines
+  are the benign `[C][rtttl:078]: Rtttl: / Gain: 0.100000` config dump (gain 10 %); no errors, no
+  boot loop. (RTTTL parses at play-time, not boot, so the beep itself is exercised only on a tap.)
+- ⏳ **Audio verification pending user:** tap each of the 7 newly-beeping buttons and confirm the
+  short beep; confirm the Pagina button stays silent.
+
+---
+
+# 2026-07-02 (session 16): Retune tap beep — softer, shorter, distinct from the alarm
+
+## Summary
+The session-15 tap beep shared the same E6 note and the same global rtttl gain as the over-power
+`beep_loop` alarm, so it sounded like a quiet copy of the alarm. On request, reworked it into a
+**soft, short, lower-pitched blip** that's clearly distinct. All 9 action buttons (gate ×3,
+VS4-V1, AC ×3, EV ×2) now call one `play_tap` script.
+
+## 1. The new tap sound
+| | Tap (new) | Over-power alarm (`beep_loop`) |
+|---|---|---|
+| Note | A5 (880 Hz) | E6 (1319 Hz) |
+| Duration | ~62 ms (32nd note) | ~150 ms (16th note) |
+| Gain | 0.05 | 0.10 |
+
+RTTTL: `tap:o=5,b=120:32a5` (32nd-note A5 @ 120 BPM). Lower pitch + ~40% the duration + half the
+gain → a soft "tick", not a beep.
+
+## 2. Per-play volume — the rtttl gain constraint
+`rtttl` exposes no per-play gain: `rtttl.play` takes only the song string, and `gain:` is a
+single global component setting (id `buzzer`, `gain: 10%`) — verified in the venv's
+`components/rtttl/rtttl.h` (it has a public `set_gain(float)` method but ESPHome exposes only
+`play`/`stop`/`is_playing` as actions). So a quieter tap can't come from the RTTTL string alone.
+The `play_tap` script calls `set_gain()` from a lambda:
+
+```yaml
+script:
+  - id: play_tap
+    mode: restart
+    then:
+      - lambda: id(buzzer)->set_gain(0.05);   # soft for the blip
+      - rtttl.play: "tap:o=5,b=120:32a5"
+      - delay: 120ms
+      - lambda: id(buzzer)->set_gain(0.10);   # restore — alarm/doorbell keep full volume
+```
+
+The 120 ms `delay` lets the ~62 ms blip finish at the low gain before restoring; `mode: restart`
+handles rapid double-taps (the last run always restores). Restore keeps `beep_loop` and the
+doorbell at 0.10 — only a ~120 ms window per tap where another sound would briefly inherit 0.05
+(negligible).
+
+## 3. Wiring — one script, 9 callers
+The 9 action buttons' `on_short_click` now end with `- script.execute: play_tap` (replacing the
+inline `rtttl.play "beep:…16e6"`). To swap the 9 identical inline lines without touching the
+alarm (which used the same string), the alarm's RTTTL *title* was renamed `beep:` → `alarm:`
+(the title is ignored in playback, so the alarm sounds identical), then the remaining 9
+`rtttl.play "beep:…"` tokens were `replace_all`-ed to `script.execute: play_tap`. Doorbell and
+alarm behaviour unchanged.
+
+## 4. Files modified
+| File | Change |
+|---|---|
+| `cyd-ha-control.yaml` | + `play_tap` script (set_gain 0.05 → blip → restore 0.10); 9 action buttons → `script.execute: play_tap`; alarm RTTTL title `beep:`→`alarm:` (sonically identical) |
+| `CLAUDE.md` | "Tap feedback" bullet rewritten for the soft blip + the gain mechanism; status bullet retuned |
+| `changelog.md` | This session-16 entry |
+
+## 5. Status
+- ✅ **Compiled** (Flash **72.6 %**, ~unchanged). The `id(buzzer)->set_gain()` lambda compiled —
+  confirms `set_gain` is reachable on the `Rtttl` component.
+- ✅ **OTA-flashed** to `192.168.1.74` (8.9 s); `OTA successful`.
+- ✅ **Clean boot**: 0 errors; rtttl reports `Gain: 0.100000` (the restored level). No regression.
+- ⏳ **Audio verification pending user:** tap an action button → expect a soft, short, low blip
+  (not the alarm-like beep). Tunable in `play_tap`: gain `0.05`, note `32a5`, BPM `120`.
+
+## 6. Further retune (same session) — higher, shorter, quieter
+User asked for another 50% volume cut, a much higher pitch, and shorter. Changed the `play_tap`
+tone: gain 0.05 → **0.025**; note A5 880 Hz → **C7 2093 Hz** (`tap:d=4,o=7,b=240:32c`); duration
+~62 ms → **~31 ms** (32nd note @ 240 BPM). Verified C7 is valid before flashing: the RTTTL parser
+caps octave at `MAX_OCTAVE = 7` and the `NOTES[]` table includes C7 = 2093 Hz (index 37 of 49);
+octave 8 would be rejected. Recompiled + OTA-flashed; clean boot (0 errors, rttl gain 0.1
+restored). Final tap sound = a soft, short, **high** tick — clearly distinct from the E6 alarm.
+User confirmed "Perfect".

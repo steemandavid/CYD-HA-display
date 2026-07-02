@@ -39,7 +39,9 @@ with stop-buttons), and **devices** (appliances + airco modes).
   kW-native × 1000 → W; the rest are already W. A small **light toggle** button (`VS4-V1`) fills
   the top-right gap under the Pagina button — tap toggles `switch.verlichting_vs4_v1`.
 - **Devices page** — washing-machine & dryer live power, plus the current mode of three
-  air conditioners (`KOEL` / `WARM` / `UIT` …), coloured by mode.
+  air conditioners (`KOEL` / `WARM` / `UIT` …), coloured by mode. **Each AC mode readout is
+  tappable** — tap cycles `cool → heat → off → cool` (calls `climate.set_hvac_mode`); the readout
+  updates once the AC confirms.
 
 ## Hardware
 

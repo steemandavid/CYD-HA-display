@@ -453,8 +453,22 @@ script:
           condition:
             binary_sensor.is_on: power_high
           then:
-            - rtttl.play: "beep:d=4,o=5,b=100:16e6"
+            - rtttl.play: "alarm:d=4,o=5,b=100:16e6"
             - delay: 3s
+
+  # Short, high, soft UI-feedback tick — deliberately distinct from the over-power alarm
+  # (beep_loop above). rtttl has no per-play gain action, so we call the component's
+  # public set_gain() from a lambda: drop to 0.025 for the tick, then restore 0.10 so the
+  # alarm/doorbell keep their normal volume. C7 (2093 Hz) x ~31 ms vs the alarm's E6
+  # (1319 Hz) x 150 ms — higher, shorter, quieter. C7 is the highest valid RTTTL octave
+  # (MAX_OCTAVE=7); tune gain/note/BPM to taste.
+  - id: play_tap
+    mode: restart
+    then:
+      - lambda: id(buzzer)->set_gain(0.025);
+      - rtttl.play: "tap:d=4,o=7,b=240:32c"
+      - delay: 120ms
+      - lambda: id(buzzer)->set_gain(0.10);
 
 # ---- Helper: momentary pulse on a switch -----------------------------------
 # Used by the three buttons. Calls turn_on, waits, then turn_off.
@@ -670,6 +684,7 @@ lvgl:
                   action: switch.toggle
                   data:
                     entity_id: !secret garage_open_switch
+              - script.execute: play_tap
 
         # --- Button: garage close ----------------------------------------
         - button:
@@ -690,6 +705,7 @@ lvgl:
                   action: switch.toggle
                   data:
                     entity_id: !secret garage_close_switch
+              - script.execute: play_tap
 
         # --- Button: door lock -------------------------------------------
         - button:
@@ -710,6 +726,7 @@ lvgl:
                   action: switch.toggle
                   data:
                     entity_id: !secret doorlock_switch
+              - script.execute: play_tap
 
         # =====================================================================
         # PAGE 2 — Energie: NET grid power + solar + battery + 2 EV stop-buttons
@@ -872,6 +889,7 @@ lvgl:
                   action: switch.toggle
                   data:
                     entity_id: !secret verlichting_vs4_switch
+              - script.execute: play_tap
 
         # --- EV stop-buttons (red; turn_off + beep) ----------------------
         - button:
@@ -909,7 +927,7 @@ lvgl:
                   action: switch.turn_off
                   data:
                     entity_id: !secret enyaq_charge_switch
-              - rtttl.play: "beep:d=4,o=5,b=100:16e6"
+              - script.execute: play_tap
 
         - button:
             align: TOP_LEFT
@@ -946,7 +964,7 @@ lvgl:
                   action: switch.turn_off
                   data:
                     entity_id: !secret vin_charge_switch
-              - rtttl.play: "beep:d=4,o=5,b=100:16e6"
+              - script.execute: play_tap
 
         # =====================================================================
         # PAGE 3 — Apparaten: washing machine + dryer + 3 AC modes
@@ -1044,7 +1062,7 @@ lvgl:
                   id: ac_woonkamer_label
                   text: "--"
                   align: TOP_LEFT
-                  x: 230
+                  x: 200
                   y: 36
                   text_color: ${col_label}
                   text_font: montserrat_24
@@ -1059,7 +1077,7 @@ lvgl:
                   id: ac_overloop_label
                   text: "--"
                   align: TOP_LEFT
-                  x: 230
+                  x: 200
                   y: 74
                   text_color: ${col_label}
                   text_font: montserrat_24
@@ -1074,10 +1092,127 @@ lvgl:
                   id: ac_slaapkamer_label
                   text: "--"
                   align: TOP_LEFT
-                  x: 230
+                  x: 200
                   y: 112
                   text_color: ${col_label}
                   text_font: montserrat_24
+              # --- AC mode tap-targets: transparent overlay buttons sitting over
+              #     each status readout. A tap cycles cool -> heat -> off -> cool
+              #     and calls climate.set_hvac_mode. entity_id stays a !secret
+              #     (never inside a lambda); the next mode is picked by branching
+              #     on the text_sensor's current state. The label beneath is
+              #     untouched and keeps reflecting the confirmed climate state.
+              - button:
+                  id: ac_woonkamer_btn
+                  align: TOP_LEFT
+                  x: 200
+                  y: 32
+                  width: 108
+                  height: 36
+                  bg_opa: TRANSP
+                  border_width: 0
+                  on_short_click:
+                    - logger.log: "AC Woonkamer tap -> cycle cool/heat/off"
+                    - if:
+                        condition:
+                          lambda: return id(climate_woonkamer).state == "cool";
+                        then:
+                          - homeassistant.action:
+                              action: climate.set_hvac_mode
+                              data:
+                                entity_id: !secret climate_woonkamer_entity
+                                hvac_mode: "heat"
+                        else:
+                          - if:
+                              condition:
+                                lambda: return id(climate_woonkamer).state == "heat";
+                              then:
+                                - homeassistant.action:
+                                    action: climate.set_hvac_mode
+                                    data:
+                                      entity_id: !secret climate_woonkamer_entity
+                                      hvac_mode: "off"
+                              else:
+                                - homeassistant.action:
+                                    action: climate.set_hvac_mode
+                                    data:
+                                      entity_id: !secret climate_woonkamer_entity
+                                      hvac_mode: "cool"
+                    - script.execute: play_tap
+              - button:
+                  id: ac_overloop_btn
+                  align: TOP_LEFT
+                  x: 200
+                  y: 70
+                  width: 108
+                  height: 36
+                  bg_opa: TRANSP
+                  border_width: 0
+                  on_short_click:
+                    - logger.log: "AC Overloop tap -> cycle cool/heat/off"
+                    - if:
+                        condition:
+                          lambda: return id(climate_overloop).state == "cool";
+                        then:
+                          - homeassistant.action:
+                              action: climate.set_hvac_mode
+                              data:
+                                entity_id: !secret climate_overloop_entity
+                                hvac_mode: "heat"
+                        else:
+                          - if:
+                              condition:
+                                lambda: return id(climate_overloop).state == "heat";
+                              then:
+                                - homeassistant.action:
+                                    action: climate.set_hvac_mode
+                                    data:
+                                      entity_id: !secret climate_overloop_entity
+                                      hvac_mode: "off"
+                              else:
+                                - homeassistant.action:
+                                    action: climate.set_hvac_mode
+                                    data:
+                                      entity_id: !secret climate_overloop_entity
+                                      hvac_mode: "cool"
+                    - script.execute: play_tap
+              - button:
+                  id: ac_slaapkamer_btn
+                  align: TOP_LEFT
+                  x: 200
+                  y: 108
+                  width: 108
+                  height: 36
+                  bg_opa: TRANSP
+                  border_width: 0
+                  on_short_click:
+                    - logger.log: "AC Slaapkamer tap -> cycle cool/heat/off"
+                    - if:
+                        condition:
+                          lambda: return id(climate_slaapkamer).state == "cool";
+                        then:
+                          - homeassistant.action:
+                              action: climate.set_hvac_mode
+                              data:
+                                entity_id: !secret climate_slaapkamer_entity
+                                hvac_mode: "heat"
+                        else:
+                          - if:
+                              condition:
+                                lambda: return id(climate_slaapkamer).state == "heat";
+                              then:
+                                - homeassistant.action:
+                                    action: climate.set_hvac_mode
+                                    data:
+                                      entity_id: !secret climate_slaapkamer_entity
+                                      hvac_mode: "off"
+                              else:
+                                - homeassistant.action:
+                                    action: climate.set_hvac_mode
+                                    data:
+                                      entity_id: !secret climate_slaapkamer_entity
+                                      hvac_mode: "cool"
+                    - script.execute: play_tap
 
         # =====================================================================
         # PAGE 4 — Temperatures: Buiten (outside) | Binnen (inside), side by side
