@@ -66,11 +66,14 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - CYD adopted in HA ESPHome integration, API connected
 - Wi-Fi SSID: `<your-wifi-ssid>`
 
-### AI usage row (2026-06-19)
-- 4 display-only `obj` cells between the power card and the buttons: `cc 5h` / `cc reset` (Claude clay `#D97757`, `col_claude`) and `z.ai 5h` / `z.ai reset` (z.ai blue `#1F63EC`, `col_zai`). Each provider gets a 5h-% cell + a reset-countdown cell. Brand colours sourced from the real assets (Anthropic skills repo; z.ai `logo.svg`), both written BGR (see Display Driver).
-- The two `%` cells import HA usage sensors directly (`claude_5h_entity`, `zai_5h_entity`).
+### AI usage rows (2026-06-19; weekly cells added 2026-09-30)
+- **Two display-only rows** between the power card and the buttons on `main_page`:
+  - **Row 1** (y 70, h 48): 4 × 74-wide cells `cc 5h` / `cc reset` (Claude clay `#D97757`, `col_claude`) and `z.ai 5h` / `z.ai reset` (z.ai blue `#1F63EC`, `col_zai`) — each provider a 5h-% cell + a reset-countdown cell.
+  - **Row 2** (y 122, h 48): 2 × 152-wide cells `cc week` (clay) + `z.ai week` (blue) — **weekly usage %**, imported directly like the 5h cells (both HA weekly entities are plain % sensors: `sensor.claude_usage_david_pro_week_usage`, `sensor.z_ai_weekly_quota_used` — verified live, no HA template needed).
+- The `%` cells import HA usage sensors directly (`claude_5h_entity`, `zai_5h_entity`, `claude_week_entity`, `zai_week_entity`).
 - **Reset cells need a computed value:** ESPHome's `homeassistant` sensor imports timestamp entities as an **ISO string**, not a usable number — so the countdowns are **HA template sensors** (`claude_reset_entity`, `zai_reset_entity`) outputting minutes-to-reset via `((states(...)|as_datetime - now()).total_seconds()/60)|round`. Defined in a YAML package (`packages/ai_usage_countdowns.yaml`, on the HA config mount + mirrored in the `hass-ai-usage-monitoring` project) — packages load only at startup, so creating/editing needs an HA restart (disarm the alarm first; alarm + Telegram + Frigate live on this box). On restart the CYD reconnects and re-subscribes, so the cells populate immediately. ESPHome formats minutes as `HuMM` (e.g. `1u23`); `isnan(x)` guard → `--`.
 - Cells are display-only (not buttons) → touch routing is unaffected.
+- **Layout after weekly row (2026-09-30):** the 3 gate/door buttons were shrunk 106→62 tall and moved y 130→174 to fit row 2; AI cells shrank 58→48 tall (value `y:1` / caption `y:-1` offsets keep the same interior spacing).
 - **LVGL `obj` padding gotcha:** the cells need `pad_all: 0`. LVGL `obj` widgets have default padding that both shrinks the area children align into (so a `TOP_MID` value and a `BOTTOM_MID` caption collide) and draws a grey auto-scrollbar band along the bottom. `pad_all: 0` kills both. Final cell layout: 74×58, value `montserrat_24` at `TOP_MID`, caption `montserrat_14` at `BOTTOM_MID`.
 
 ### Multi-page UI + Temperature page (2026-06-29)
@@ -112,6 +115,7 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - ✅ Light toggle on energy page (2026-07-01): 74×74 blue button in the top-right gap under the Pagina button (right of ZON/BATT), `switch.toggle` on `switch.verlichting_vs4_v1`. Compiled (Flash 72.4 %), OTA-flashed, clean boot (all sensors live, no errors). **Visual/tap verification pending user** (button renders top-right on page 2; tap toggles the light).
 - ✅ AC mode toggle on devices page (2026-07-02): the 3 AC status readouts are tappable — tap cycles cool→heat→off→cool via `climate.set_hvac_mode` (secret-safe `if`-branching). Compiled (Flash 72.6 %), OTA-flashed, clean boot (all 3 climate text_sensors subscribed, no errors). **Tap verification pending user** (tap a KOEL readout → flips to WARM/heat; the Midea ACs support cool/heat/off). See "AC mode toggle".
 - ✅ Tap feedback on all action buttons (2026-07-02, retuned twice same-day): all action buttons (gate, VS4-V1, AC, EV) call a `play_tap` script → soft **C7 2093 Hz ~31 ms tick at gain 0.025**, distinct from the E6 over-power alarm (volume set/restored via a `set_gain()` lambda, since `rtttl` has no per-play gain action; C7 is the max RTTTL octave). **Pagina excepted** (silent). Compiled (Flash 72.6 %), OTA-flashed, clean boot (rtttl gain 0.1, no errors). **Audio verification pending user** (tap → soft high tick; tunable in `play_tap`).
+- ✅ Weekly AI usage cells (2026-09-30): row 2 under the existing AI row — `cc week` (clay) + `z.ai week` (blue), 152×48 each, importing the HA weekly % sensors directly (units verified live: both %). Gate/door buttons shrunk 106→62 tall (y 130→174) to make room. Compiled, OTA-flashed; boot log confirms both weekly sensors subscribed with live states (9 % / 13 %). **Visual verification pending user** (row 2 renders, values populate, buttons still tappable at reduced height).
 
 ## ESPHome Environment
 - Venv: `~/esphome-cyd-venv`

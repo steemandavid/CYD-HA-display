@@ -168,6 +168,7 @@ sensor:
 
   # --- AI usage cells (imported from HA; reset cells are HA templates) ---
   # Claude 5h % and z.ai 5h % — show "<n>%"; reset cells show "HuMM" countdown.
+  # Weekly cells (row 2) are plain % sensors imported directly, like the 5h ones.
   - platform: homeassistant
     id: claude_5h
     entity_id: !secret claude_5h_entity
@@ -218,6 +219,30 @@ sensor:
             if (mins < 0) mins = 0;
             char buf[12];
             snprintf(buf, sizeof(buf), "%du%02d", mins / 60, mins % 60);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: claude_week
+    entity_id: !secret claude_week_entity
+    on_value:
+      - lvgl.label.update:
+          id: claude_week_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[10];
+            snprintf(buf, sizeof(buf), "%.0f%%", x);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: zai_week
+    entity_id: !secret zai_week_entity
+    on_value:
+      - lvgl.label.update:
+          id: zai_week_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            char buf[10];
+            snprintf(buf, sizeof(buf), "%.0f%%", x);
             return std::string(buf);
 
   # --- Temperatures (shown on page 2 / temp_page) ---
@@ -536,14 +561,15 @@ lvgl:
                   text_color: 0xFFFFFF
                   text_font: montserrat_48
 
-        # --- AI usage row ------------------------------------------------
-        # Four display-only cells (NOT buttons): cc 5h% | cc reset | z.ai 5h%
-        # | z.ai reset. Each provider gets a 5h-% cell + a reset-countdown
-        # cell. Claude cells = clay (#D97757), z.ai cells = blue (#1F63EC);
-        # the caption also names the provider. Reset cells are HA template
-        # sensors computing minutes-to-reset (ESPHome can't read the ISO
-        # timestamp entities as numbers). 4 x 74 wide, 6px side margins,
-        # 4px gaps; y 70, height 58.
+        # --- AI usage rows (2026-09-30: weekly cells added) ---------------
+        # Two display-only rows (NOT buttons):
+        #   Row 1 (y 70, h 48): cc 5h% | cc reset | z.ai 5h% | z.ai reset
+        #   Row 2 (y 122, h 48): cc week% (clay) | z.ai week% (blue), 152 wide
+        # Claude cells = clay (#D97757), z.ai cells = blue (#1F63EC); the
+        # caption also names the provider. Reset cells are HA template sensors
+        # computing minutes-to-reset (ESPHome can't read the ISO timestamp
+        # entities as numbers); weekly cells are plain % sensors like the 5h.
+        # Row 1: 4 x 74 wide, 6px side margins, 4px gaps. Row 2: 2 x 152 wide.
 
         # --- Cell: Claude 5h % -------------------------------------------
         - obj:
@@ -551,7 +577,7 @@ lvgl:
             x: 6
             y: 70
             width: 74
-            height: 58
+            height: 48
             bg_color: ${col_claude}
             bg_opa: COVER
             radius: 8
@@ -562,13 +588,13 @@ lvgl:
                   id: claude_5h_label
                   text: "--%"
                   align: TOP_MID
-                  y: 6
+                  y: 1
                   text_color: 0xFFFFFF
                   text_font: montserrat_24
               - label:
                   text: "cc 5h"
                   align: BOTTOM_MID
-                  y: -6
+                  y: -1
                   width: 72
                   text_align: CENTER
                   text_color: 0xFFFFFF
@@ -580,7 +606,7 @@ lvgl:
             x: 84
             y: 70
             width: 74
-            height: 58
+            height: 48
             bg_color: ${col_claude}
             bg_opa: COVER
             radius: 8
@@ -591,13 +617,13 @@ lvgl:
                   id: claude_reset_label
                   text: "--"
                   align: TOP_MID
-                  y: 6
+                  y: 1
                   text_color: 0xFFFFFF
                   text_font: montserrat_24
               - label:
                   text: "cc reset"
                   align: BOTTOM_MID
-                  y: -6
+                  y: -1
                   width: 72
                   text_align: CENTER
                   text_color: 0xFFFFFF
@@ -609,7 +635,7 @@ lvgl:
             x: 162
             y: 70
             width: 74
-            height: 58
+            height: 48
             bg_color: ${col_zai}
             bg_opa: COVER
             radius: 8
@@ -620,13 +646,13 @@ lvgl:
                   id: zai_5h_label
                   text: "--%"
                   align: TOP_MID
-                  y: 6
+                  y: 1
                   text_color: 0xFFFFFF
                   text_font: montserrat_24
               - label:
                   text: "z.ai 5h"
                   align: BOTTOM_MID
-                  y: -6
+                  y: -1
                   width: 72
                   text_align: CENTER
                   text_color: 0xFFFFFF
@@ -638,7 +664,7 @@ lvgl:
             x: 240
             y: 70
             width: 74
-            height: 58
+            height: 48
             bg_color: ${col_zai}
             bg_opa: COVER
             radius: 8
@@ -649,29 +675,88 @@ lvgl:
                   id: zai_reset_label
                   text: "--"
                   align: TOP_MID
-                  y: 6
+                  y: 1
                   text_color: 0xFFFFFF
                   text_font: montserrat_24
               - label:
                   text: "z.ai reset"
                   align: BOTTOM_MID
-                  y: -6
+                  y: -1
                   width: 72
                   text_align: CENTER
                   text_color: 0xFFFFFF
                   text_font: montserrat_14
 
-        # --- Three tall buttons side by side -----------------------------
-        # Lower area (y 130..236). Each ~100 wide x 106 tall; 6px side margins,
-        # 4px gaps. Labels wrap to fit the narrower width.
+        # --- Cell: Claude week % (row 2) ---------------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 6
+            y: 122
+            width: 152
+            height: 48
+            bg_color: ${col_claude}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  id: claude_week_label
+                  text: "--%"
+                  align: TOP_MID
+                  y: 1
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "cc week"
+                  align: BOTTOM_MID
+                  y: -1
+                  width: 150
+                  text_align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+
+        # --- Cell: z.ai week % (row 2) -----------------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 162
+            y: 122
+            width: 152
+            height: 48
+            bg_color: ${col_zai}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  id: zai_week_label
+                  text: "--%"
+                  align: TOP_MID
+                  y: 1
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "z.ai week"
+                  align: BOTTOM_MID
+                  y: -1
+                  width: 150
+                  text_align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+
+        # --- Three buttons side by side ----------------------------------
+        # Lower area (y 174..236) — height reduced 106 -> 62 to make room for
+        # the weekly AI cells. Each ~100 wide; 6px side margins, 4px gaps.
+        # Labels wrap to fit the narrower width.
 
         # --- Button: garage open -----------------------------------------
         - button:
             align: TOP_LEFT
             x: 6
-            y: 130
+            y: 174
             width: 100
-            height: 106
+            height: 62
             widgets:
               - label:
                   text: "Garage OPENEN"
@@ -690,9 +775,9 @@ lvgl:
         - button:
             align: TOP_LEFT
             x: 110
-            y: 130
+            y: 174
             width: 100
-            height: 106
+            height: 62
             widgets:
               - label:
                   text: "Garage SLUITEN"
@@ -711,9 +796,9 @@ lvgl:
         - button:
             align: TOP_LEFT
             x: 214
-            y: 130
+            y: 174
             width: 100
-            height: 106
+            height: 62
             widgets:
               - label:
                   text: "Deurslot WACHT KAMER"
