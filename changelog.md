@@ -1323,3 +1323,67 @@ caps octave at `MAX_OCTAVE = 7` and the `NOTES[]` table includes C7 = 2093 Hz (i
 octave 8 would be rejected. Recompiled + OTA-flashed; clean boot (0 errors, rttl gain 0.1
 restored). Final tap sound = a soft, short, **high** tick — clearly distinct from the E6 alarm.
 User confirmed "Perfect".
+
+# 2026-10-01 (session 17): Weekly AI usage cells + weekly reset countdowns
+
+## Summary
+
+Extended the main-page AI usage area from one row to two: weekly usage % for
+both providers, then (second change) weekly reset countdowns styled after the
+5h reset cells. Gate/door buttons shrunk to make room. One HA restart was
+needed to load the new weekly-countdown template sensors. User verified
+everything OK; the `cc 5h` reset cell showing `--` was diagnosed as correct
+upstream behaviour (no active Claude session).
+
+## 1. Weekly usage cells (row 2) — 2026-09-30
+
+- Both HA weekly entities are **plain % sensors**, imported directly like the
+  5h cells (no HA template needed):
+  - `sensor.claude_usage_david_pro_week_usage` (9 % at the time)
+  - `sensor.z_ai_weekly_quota_used` (13 %)
+- New secrets: `claude_week_entity`, `zai_week_entity` (+ example file).
+- Layout: row 2 at y 122 (initially 2 × 152-wide cells), row 1 shrank
+  58 → 48 px tall (value `y:1` / caption `y:-1` keeps the same interior
+  spacing), gate/door buttons shrunk 106 → 62 tall and moved y 130 → 174.
+- Commit `f93294e`, pushed.
+
+## 2. Weekly reset countdowns — 2026-10-01
+
+- Row 2 split into **4 × 74-wide cells mirroring row 1**:
+  `cc week | cc reset | z.ai week | z.ai reset` — the whole row is weekly, so
+  the "reset" captions stay ≤ 10 chars and keep their proven 74 px fit.
+- Two new HA template sensors (same pattern as the 5h countdowns, since
+  timestamp entities arrive as ISO strings ESPHome can't compute on):
+  - `sensor.claude_weekly_minutes_to_reset` ← `..._weekly_reset_time`
+  - `sensor.z_ai_weekly_minutes_to_reset` ← `sensor.z_ai_weekly_reset_time`
+  - Added to `/mnt/homeassistant/config/packages/ai_usage_countdowns.yaml`
+    (live, via SMB) + the `hass-ai-usage-monitoring` project mirror.
+- **Format `NdHH`** (days+hours, e.g. `5d13`): a week at the 5h `HuMM` format
+  would render `168u00` and overflow a 74 px cell.
+- New secrets: `claude_week_reset_entity`, `zai_week_reset_entity`.
+- **HA restart required** (packages load at startup only) — user-approved,
+  alarm disarmed first. After restart both sensors live (7981 min / 772 min)
+  and the CYD re-subscribed automatically.
+- Commits `d368b6c` (CYD repo) + `bbf4b99` (monitoring repo), both pushed.
+
+## 3. "cc 5h reset shows `--`" — diagnosis (not a bug)
+
+- After the restart the cell showed `--`. Root cause: the Claude account had
+  **no active 5h session** (overnight lapse) →
+  `sensor.claude_usage_david_pro_session_reset_time` = `unknown`
+  (confirmed via `..._session_limit_usage` → `is_active: false`, usage 0 %).
+- Anthropic sessions only exist while active, so there is legitimately no
+  countdown; the template correctly outputs `unknown` → `--`.
+- Self-heals within a poll cycle once Claude usage resumes. z.ai's rolling
+  quota always has a reset time, so its cell never blanks.
+- Left as `--` (honest "no countdown exists"); user informed, no change made.
+
+## Notes / Caveats
+
+- Row-1 weekly caption reuse: row 2 "reset" captions read as weekly-reset —
+  intentional, documented in the YAML comment block.
+- `montserrat_24` + `montserrat_14` in a 48 px cell needs value `y:1` /
+  caption `y:-1` offsets — 2 px slack, verified rendering fine.
+- Live HA packages are reachable via SMB at `/mnt/homeassistant/config`
+  (john-ai workstation mount); mirror lives in the
+  `hass-ai-usage-monitoring` repo and differs from live only in header comment.
