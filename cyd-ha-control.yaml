@@ -245,6 +245,37 @@ sensor:
             snprintf(buf, sizeof(buf), "%.0f%%", x);
             return std::string(buf);
 
+  # Weekly reset countdowns — HA template sensors like the 5h ones (timestamp
+  # entities can't be read as numbers). Shown as "NdHH" days+hours: a week is
+  # up to 10080 min, and "168u00" (HuMM) would overflow a 74 px cell.
+  - platform: homeassistant
+    id: claude_week_reset
+    entity_id: !secret claude_week_reset_entity
+    on_value:
+      - lvgl.label.update:
+          id: claude_week_reset_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            int mins = (int) x;
+            if (mins < 0) mins = 0;
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%dd%02d", mins / 1440, (mins % 1440) / 60);
+            return std::string(buf);
+
+  - platform: homeassistant
+    id: zai_week_reset
+    entity_id: !secret zai_week_reset_entity
+    on_value:
+      - lvgl.label.update:
+          id: zai_week_reset_label
+          text: !lambda |-
+            if (isnan(x)) return std::string("--");
+            int mins = (int) x;
+            if (mins < 0) mins = 0;
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%dd%02d", mins / 1440, (mins % 1440) / 60);
+            return std::string(buf);
+
   # --- Temperatures (shown on page 2 / temp_page) ---
   # Outside (Esp-216 "Temperatuur buiten") + inside (Esp-213 "binnen"), °C,
   # shown to 1 decimal. ° renders in the built-in Montserrat font. The labels
@@ -561,15 +592,18 @@ lvgl:
                   text_color: 0xFFFFFF
                   text_font: montserrat_48
 
-        # --- AI usage rows (2026-09-30: weekly cells added) ---------------
-        # Two display-only rows (NOT buttons):
-        #   Row 1 (y 70, h 48): cc 5h% | cc reset | z.ai 5h% | z.ai reset
-        #   Row 2 (y 122, h 48): cc week% (clay) | z.ai week% (blue), 152 wide
-        # Claude cells = clay (#D97757), z.ai cells = blue (#1F63EC); the
-        # caption also names the provider. Reset cells are HA template sensors
-        # computing minutes-to-reset (ESPHome can't read the ISO timestamp
-        # entities as numbers); weekly cells are plain % sensors like the 5h.
-        # Row 1: 4 x 74 wide, 6px side margins, 4px gaps. Row 2: 2 x 152 wide.
+        # --- AI usage rows (weekly cells added 2026-09-30) ----------------
+        # Two display-only rows (NOT buttons), each 4 x 74 wide, h 48,
+        # 6px side margins, 4px gaps:
+        #   Row 1 (y 70):  cc 5h% | cc reset | z.ai 5h% | z.ai reset   (5-hour)
+        #   Row 2 (y 122): cc week% | cc reset | z.ai week% | z.ai reset (weekly)
+        # The whole of row 2 is weekly, so its "reset" captions are read as
+        # weekly-reset. Claude cells = clay (#D97757), z.ai = blue (#1F63EC).
+        # Reset cells are HA template sensors computing minutes-to-reset
+        # (ESPHome can't read the ISO timestamp entities as numbers); the %
+        # cells (5h and week) are plain HA sensors imported directly.
+        # 5h reset shows HuMM ("1u23"); week reset shows NdHH ("5d03") — a
+        # week at HuMM ("168u00") would overflow the 74 px cell.
 
         # --- Cell: Claude 5h % -------------------------------------------
         - obj:
@@ -687,12 +721,12 @@ lvgl:
                   text_color: 0xFFFFFF
                   text_font: montserrat_14
 
-        # --- Cell: Claude week % (row 2) ---------------------------------
+        # --- Cell: Claude week % (row 2, weekly) --------------------------
         - obj:
             align: TOP_LEFT
             x: 6
             y: 122
-            width: 152
+            width: 74
             height: 48
             bg_color: ${col_claude}
             bg_opa: COVER
@@ -711,17 +745,46 @@ lvgl:
                   text: "cc week"
                   align: BOTTOM_MID
                   y: -1
-                  width: 150
+                  width: 72
                   text_align: CENTER
                   text_color: 0xFFFFFF
                   text_font: montserrat_14
 
-        # --- Cell: z.ai week % (row 2) -----------------------------------
+        # --- Cell: Claude weekly reset (row 2) ----------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 84
+            y: 122
+            width: 74
+            height: 48
+            bg_color: ${col_claude}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  id: claude_week_reset_label
+                  text: "--"
+                  align: TOP_MID
+                  y: 1
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "cc reset"
+                  align: BOTTOM_MID
+                  y: -1
+                  width: 72
+                  text_align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+
+        # --- Cell: z.ai week % (row 2, weekly) ----------------------------
         - obj:
             align: TOP_LEFT
             x: 162
             y: 122
-            width: 152
+            width: 74
             height: 48
             bg_color: ${col_zai}
             bg_opa: COVER
@@ -740,7 +803,36 @@ lvgl:
                   text: "z.ai week"
                   align: BOTTOM_MID
                   y: -1
-                  width: 150
+                  width: 72
+                  text_align: CENTER
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_14
+
+        # --- Cell: z.ai weekly reset (row 2) ------------------------------
+        - obj:
+            align: TOP_LEFT
+            x: 240
+            y: 122
+            width: 74
+            height: 48
+            bg_color: ${col_zai}
+            bg_opa: COVER
+            radius: 8
+            border_width: 0
+            pad_all: 0
+            widgets:
+              - label:
+                  id: zai_week_reset_label
+                  text: "--"
+                  align: TOP_MID
+                  y: 1
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - label:
+                  text: "z.ai reset"
+                  align: BOTTOM_MID
+                  y: -1
+                  width: 72
                   text_align: CENTER
                   text_color: 0xFFFFFF
                   text_font: montserrat_14
