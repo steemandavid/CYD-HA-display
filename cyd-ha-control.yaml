@@ -10,6 +10,7 @@ substitutions:
   friendly_name: "CYD Control Display"
   color_threshold: "200"         # watts — power value green below, blue at/above (red tracks buzzer_threshold)
   buzzer_threshold: "3000"       # watts — alarm beeps above this
+  mute_duration: "8h"            # tap the power card -> alarm muted this long (tap again = unmute)
   # --- Colour constants are written BGR (red/blue byte-swapped): the ILI9342 panel's
   #     MADCTL BGR bit swaps R/B, so values are pre-swapped to compensate.
   #     (`color_order:` has no effect on the LVGL path; swap the 1st/3rd byte to
@@ -24,6 +25,7 @@ substitutions:
   col_claude: "0x5777D9"   # -> true 0xD97757  Claude clay (AI usage cells)
   col_zai: "0xEC631F"      # -> true 0x1F63EC  z.ai blue  (AI usage cells)
   col_solar: "0x00B5F5"    # -> true 0xF5B800  amber (energy page solar values)
+  col_muted: "0x1A1A4A"    # -> true 0x4A1A1A  dark red power card while alarm is muted
 
 esphome:
   name: ${name}
@@ -78,6 +80,14 @@ light:
     id: backlight
     name: "Backlight"
     restore_mode: ALWAYS_ON
+
+# ---- Alarm mute flag (toggled by tapping the power card) -------------------
+# Not restored across reboot: a reboot simply clears the mute.
+globals:
+  - id: alarm_muted
+    type: bool
+    restore_value: false
+    initial_value: "false"
 
 # ---- Speaker / beep --------------------------------------------------------
 rtttl:
@@ -509,8 +519,41 @@ script:
           condition:
             binary_sensor.is_on: power_high
           then:
-            - rtttl.play: "alarm:d=4,o=5,b=100:16e6"
+            # Keep looping while muted (just skip the beep) so unmuting mid-alarm
+            # resumes beeping straight away.
+            - if:
+                condition:
+                  lambda: return !id(alarm_muted);
+                then:
+                  - rtttl.play: "alarm:d=4,o=5,b=100:16e6"
             - delay: 3s
+
+  # Alarm mute: tap the power card to mute the over-power beep for ${mute_duration};
+  # tap again to unmute early. Visual: card turns dark red + mute icon top-right.
+  - id: mute_timer
+    mode: restart
+    then:
+      - globals.set:
+          id: alarm_muted
+          value: "true"
+      - logger.log: "Alarm muted for ${mute_duration}"
+      - lvgl.widget.update:
+          id: power_card
+          bg_color: ${col_muted}
+      - lvgl.widget.show: mute_icon
+      - delay: ${mute_duration}
+      - script.execute: unmute_alarm
+
+  - id: unmute_alarm
+    then:
+      - globals.set:
+          id: alarm_muted
+          value: "false"
+      - logger.log: "Alarm unmuted"
+      - lvgl.widget.update:
+          id: power_card
+          bg_color: ${col_card}
+      - lvgl.widget.hide: mute_icon
 
   # Short, high, soft UI-feedback tick — deliberately distinct from the over-power alarm
   # (beep_loop above). rtttl has no per-play gain action, so we call the component's
@@ -573,7 +616,9 @@ lvgl:
       widgets:
         # --- Big power readout (value only; "Verbruik" label dropped) ----
         # Width shrunk 300 -> 230 to leave room for the top-right Page button.
+        # Tappable: toggles the over-power alarm mute (${mute_duration}).
         - obj:
+            id: power_card
             align: TOP_LEFT
             x: 6
             y: 4
@@ -584,6 +629,8 @@ lvgl:
             radius: 8
             border_width: 0
             pad_all: 0
+            clickable: true
+            scrollable: false
             widgets:
               - label:
                   id: power_label
@@ -591,6 +638,26 @@ lvgl:
                   align: CENTER
                   text_color: 0xFFFFFF
                   text_font: montserrat_48
+              # Mute indicator (LV_SYMBOL_MUTE, built into the Montserrat fonts).
+              - label:
+                  id: mute_icon
+                  text: "\uF026"
+                  align: TOP_RIGHT
+                  x: -4
+                  y: 2
+                  text_color: ${col_high}
+                  text_font: montserrat_14
+                  hidden: true
+            on_short_click:
+              - if:
+                  condition:
+                    lambda: return id(alarm_muted);
+                  then:
+                    - script.stop: mute_timer
+                    - script.execute: unmute_alarm
+                  else:
+                    - script.execute: mute_timer
+              - script.execute: play_tap
 
         # --- AI usage rows (weekly cells added 2026-09-30) ----------------
         # Two display-only rows (NOT buttons), each 4 x 74 wide, h 48,

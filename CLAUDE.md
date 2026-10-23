@@ -36,6 +36,12 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - `buffer_size: 25%` (no PSRAM on CYD)
 - **Colours are written BGR (R/B byte-swapped)** — the ILI9342 model sets `MADCTL=0x48` (BGR bit), so the panel swaps red/blue; the `col_*` substitutions pre-swap R/B to compensate. `color_order: BGR` has NO effect on the LVGL direct-buffer path (verified empirically — it left the output unchanged), so the swap must be handled in the colour values themselves. Without this, blue renders orange and red renders blue; green looked fine (nearly swap-symmetric), which hid the bug until blue/red were actually used (2026-06-13). The same BGR rule applies to the AI-row brand colours: `col_claude` (true `0xD97757` Claude clay → stored `0x5777D9`) and `col_zai` (true `0x1F63EC` z.ai blue → stored `0xEC631F`).
 
+### Alarm mute (2026-10-23)
+- **Tap the main-page power card** to mute the over-power `beep_loop` alarm for `mute_duration` (`8h` substitution); **tap again to unmute** early. Toggle plays the `play_tap` tick.
+- State = `globals` bool `alarm_muted` (not restored → a reboot clears the mute). Timer = `mute_timer` script (`mode: restart`, `delay: 8h` → `unmute_alarm`); unmute-early = `script.stop: mute_timer` + `unmute_alarm`.
+- `beep_loop` keeps looping while muted and only skips `rtttl.play`, so unmuting mid-alarm resumes beeping immediately. Only the alarm is muted — doorbell chime and tap ticks still sound.
+- **Visual:** power card bg → `col_muted` (dark red, true `0x4A1A1A`) + an `LV_SYMBOL_MUTE` (`\uF026`, built into Montserrat) icon in `col_high` at the card's top-right.
+
 ### Speaker
 - Uses `ledc` output on GPIO26 (NOT `esp32_dac` — rtttl doesn't support esp32_dac)
 - RTTTL gain at 10%
