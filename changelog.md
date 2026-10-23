@@ -1387,3 +1387,42 @@ upstream behaviour (no active Claude session).
 - Live HA packages are reachable via SMB at `/mnt/homeassistant/config`
   (john-ai workstation mount); mirror lives in the
   `hass-ai-usage-monitoring` repo and differs from live only in header comment.
+
+---
+
+# 2026-10-23 (session 18): Alarm mute — tap the power card to silence the over-power beep for 8 h
+
+## Summary
+
+Made the main-page power card (the only non-button area) a mute toggle for the
+over-power alarm: one tap mutes for 8 h, a second tap unmutes early. Mute state is
+visible on the card itself. Compiled, OTA-flashed, clean boot.
+
+## 1. Firmware changes (`cyd-ha-control.yaml`)
+
+- **New substitutions:** `mute_duration: "8h"`, `col_muted: "0x1A1A4A"` (BGR → true
+  `0x4A1A1A` dark red).
+- **New `globals`:** `alarm_muted` (bool, `restore_value: false` → a reboot clears it;
+  the CYD has no RTC/time component, so remaining mute time can't survive a reboot).
+- **`beep_loop`:** still loops while `power_high` is on, but wraps `rtttl.play` in
+  `if !alarm_muted` — so unmuting mid-alarm resumes beeping on the next 3 s cycle.
+- **New scripts:** `mute_timer` (`mode: restart`: set flag, card → `col_muted`, show
+  icon, `delay: ${mute_duration}`, then `unmute_alarm`) and `unmute_alarm` (clear flag,
+  card → `col_card`, hide icon).
+- **Power card:** `obj` got `id: power_card`, `clickable: true`, `scrollable: false`,
+  and an `on_short_click` toggle (`if alarm_muted` → `script.stop: mute_timer` +
+  `unmute_alarm`, else `mute_timer`), ending with `play_tap` like all action buttons.
+- **Indicator:** hidden `mute_icon` label — `LV_SYMBOL_MUTE` (``, built into
+  Montserrat), `montserrat_14`, `col_high`, `TOP_RIGHT` x:-4 y:2.
+
+## 2. Build / deploy
+
+- `esphome compile` OK, `esphome upload --device <CYD_IP>` → OTA successful; boot log
+  clean (no errors/warnings, sensors re-subscribed).
+- Commit `0f4555d` pushed (firmware + CLAUDE.md section).
+
+## Notes / Caveats
+
+- Only the over-power alarm is muted — doorbell chime and tap ticks still sound (by design).
+- **Pending user verification:** tap → dark-red card + 🔇 icon; tap again → normal.
+  The 14 px icon might touch very wide readings (e.g. `-3500 W`) — move it if so.

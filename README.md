@@ -28,6 +28,10 @@ with stop-buttons), and **devices** (appliances + airco modes).
   | Deurslot WACHT KAMER | toggles `switch.your_door_lock` |
 - **Over-power alarm** — short repeating beep while power stays **above 3000 W** for 5 s
   (5 s debounce), via the onboard speaker.
+- **Alarm mute** — tap the main-page **power card** to mute the over-power beep for **8 h**;
+  tap again to unmute early. While muted the card turns dark red and shows a 🔇 icon
+  top-right. Only the alarm is muted (doorbell chime + tap ticks still sound); a reboot
+  clears the mute.
 - **Temperature page (multi-page UI)** — tap the top-right **Pagina** button to cycle to the
   **temperature** page: two temperatures side by side, **Buiten** (outside) and **Binnen**
   (inside), each a large readout on a dark card. The button lives on the `top_layer`, so it
@@ -175,6 +179,7 @@ above. To point the panel at different entities, just edit those values.
 |--------------|---------|---------|
 | `color_threshold` | `200` | Watts; label green below, red at/above |
 | `buzzer_threshold` | `3000` | Watts; alarm beeps above this (5 s debounce) |
+| `mute_duration` | `8h` | How long a power-card tap mutes the alarm |
 
 ## Key technical decisions & gotchas
 

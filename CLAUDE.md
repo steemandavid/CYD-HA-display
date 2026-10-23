@@ -126,6 +126,8 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - ✅ Weekly AI usage cells (2026-09-30): row 2 under the existing AI row — `cc week` (clay) + `z.ai week` (blue), 152×48 each, importing the HA weekly % sensors directly (units verified live: both %). Gate/door buttons shrunk 106→62 tall (y 130→174) to make room. Compiled, OTA-flashed; boot log confirms both weekly sensors subscribed with live states (9 % / 13 %). **Visual verification pending user** (row 2 renders, values populate, buttons still tappable at reduced height).
 - ✅ Weekly reset countdowns (2026-10-01): row 2 split into 4 × 74 cells matching row 1 — `cc week | cc reset | z.ai week | z.ai reset`. Two new HA template sensors (`*_weekly_minutes_to_reset`) in `packages/ai_usage_countdowns.yaml` (live + `hass-ai-usage-monitoring` mirror); format `NdHH`. HA restarted (user-approved) → sensors live (Claude 5d13, z.ai 0d12); CYD re-subscribed after restart. **User-verified OK** — the one oddity (`cc 5h` reset showing `--`) is correct upstream behaviour: no active Claude session → no reset time (see AI usage rows).
 
+- ✅ Alarm mute (2026-10-23): tap the main-page power card → over-power alarm muted 8 h (`mute_duration`), tap again → unmute; muted = dark-red card + 🔇 icon top-right. Compiled, OTA-flashed, clean boot. **Tap/visual verification pending user** (also check the icon doesn't touch wide readings like `-3500 W`). See "Alarm mute".
+
 ## ESPHome Environment
 - Venv: `~/esphome-cyd-venv`
 - Version: ESPHome 2026.5.3
