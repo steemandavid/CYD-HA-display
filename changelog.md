@@ -1454,3 +1454,5 @@ The beep no longer fires on live power > 3000 W. It now fires when the EMS's
 
 - Old HA entity `…_power_above_threshold` is orphaned (unreferenced) — safe to delete.
 - Live trigger not yet field-tested (needs a real over-ceiling quarter).
+- Docs follow-up: remaining "over-power" wording for current behaviour in README/CLAUDE.md
+  changed to "over-ceiling" (historical status entries left as-is).

@@ -3,7 +3,7 @@
 ESPHome firmware that turns a **Cheap Yellow Display (CYD / ESP32-2432S028)** into a
 wall-mounted control panel for [Home Assistant](https://www.home-assistant.io/). It shows
 live power consumption and provides three touch buttons that toggle Home Assistant switches,
-plus an audible over-power alarm. A top-right **Pagina** button cycles through the other
+plus an audible alarm when the EMS projected quarter-hour peak exceeds the plafond. A top-right **Pagina** button cycles through the other
 pages: **temperatures**, an **energy monitor** (grid, solar, home battery, two EV chargers
 with stop-buttons), and **devices** (appliances + airco modes).
 
@@ -30,7 +30,7 @@ with stop-buttons), and **devices** (appliances + airco modes).
   peak** ("geprojecteerd einde kwartier", `ems_projection_entity`) stays **above the EMS
   ceiling** (plafond, `ems_ceiling_entity` — follows the monthly bracket, e.g. 6.8 kW) for
   5 s, via the onboard speaker. (Before 2026-10-25 it beeped on live power > 3000 W.)
-- **Alarm mute** — tap the main-page **power card** to mute the over-power beep for **8 h**;
+- **Alarm mute** — tap the main-page **power card** to mute the over-ceiling beep for **8 h**;
   tap again to unmute early. While muted the card turns dark red and shows a 🔇 icon
   top-right. Only the alarm is muted (doorbell chime + tap ticks still sound); a reboot
   clears the mute.
