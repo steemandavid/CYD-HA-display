@@ -26,8 +26,10 @@ with stop-buttons), and **devices** (appliances + airco modes).
   | Garage OPENEN | toggles `switch.your_garage_open` |
   | Garage SLUITEN | toggles `switch.your_garage_close` |
   | Deurslot WACHT KAMER | toggles `switch.your_door_lock` |
-- **Over-power alarm** — short repeating beep while power stays **above 3000 W** for 5 s
-  (5 s debounce), via the onboard speaker.
+- **Over-ceiling alarm** — short repeating beep while the EMS **projected end-of-quarter
+  peak** ("geprojecteerd einde kwartier", `ems_projection_entity`) stays **above the EMS
+  ceiling** (plafond, `ems_ceiling_entity` — follows the monthly bracket, e.g. 6.8 kW) for
+  5 s, via the onboard speaker. (Before 2026-10-25 it beeped on live power > 3000 W.)
 - **Alarm mute** — tap the main-page **power card** to mute the over-power beep for **8 h**;
   tap again to unmute early. While muted the card turns dark red and shows a 🔇 icon
   top-right. Only the alarm is muted (doorbell chime + tap ticks still sound); a reboot
@@ -178,7 +180,7 @@ above. To point the panel at different entities, just edit those values.
 | Substitution | Default | Meaning |
 |--------------|---------|---------|
 | `color_threshold` | `200` | Watts; label green below, red at/above |
-| `buzzer_threshold` | `3000` | Watts; alarm beeps above this (5 s debounce) |
+| `red_threshold` | `3000` | Watts; power value red at/above (colour only — the alarm follows the EMS) |
 | `mute_duration` | `8h` | How long a power-card tap mutes the alarm |
 
 ## Key technical decisions & gotchas

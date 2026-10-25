@@ -1426,3 +1426,31 @@ visible on the card itself. Compiled, OTA-flashed, clean boot.
 - Only the over-power alarm is muted — doorbell chime and tap ticks still sound (by design).
 - **Pending user verification:** tap → dark-red card + 🔇 icon; tap again → normal.
   The 14 px icon might touch very wide readings (e.g. `-3500 W`) — move it if so.
+
+---
+
+# 2026-10-25 (session 19): Alarm trigger → EMS projected quarter-hour peak vs plafond
+
+## Summary
+
+The beep no longer fires on live power > 3000 W. It now fires when the EMS's
+**projected end-of-quarter peak** exceeds the **EMS ceiling (plafond)** — currently
+6.8 kW, and it tracks the monthly capacity bracket automatically.
+
+## Changes
+
+- Found the entities from the EMS dashboard ("⚡ Kwartier" card in
+  `.storage/lovelace.ems`): "geprojecteerd einde kwartier" = `sensor.ems_kwartier_budget`
+  (kW), plafond = `sensor.ems_plafond` (kW, 6.8).
+- Two new `homeassistant` sensors `ems_projection` / `ems_ceiling` (secrets
+  `ems_projection_entity`, `ems_ceiling_entity`; placeholders in `secrets.yaml.example`).
+- `power_high` lambda → `projection > ceiling` (NaN/missing → false), 5 s debounce kept;
+  renamed "Kwartierprojectie boven plafond". `beep_loop` + 8 h mute unchanged.
+- `buzzer_threshold` → `red_threshold` (3000 W, now colour-only for the power card).
+- Compiled (Flash 72.9 %), OTA-flashed; boot log shows both EMS sensors live
+  (0.91 / 6.80 kW), clean boot.
+
+## Notes
+
+- Old HA entity `…_power_above_threshold` is orphaned (unreferenced) — safe to delete.
+- Live trigger not yet field-tested (needs a real over-ceiling quarter).

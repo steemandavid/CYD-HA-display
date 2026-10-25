@@ -1,6 +1,7 @@
 # =============================================================================
 # CYD (ESP32-2432S028) — Home Assistant control display
-# Shows a power sensor large; three toggle buttons; beep > 3000 W.
+# Shows a power sensor large; three toggle buttons; beeps when the EMS projected
+# quarter-hour peak exceeds the EMS ceiling (plafond).
 # All site-specific values (Wi-Fi, API key, HA entity IDs) live in secrets.yaml.
 # Board: Cheap Yellow Display, ILI9341 + XPT2046 resistive touch, GPIO26 amp.
 # =============================================================================
@@ -8,8 +9,8 @@
 substitutions:
   name: cyd-control
   friendly_name: "CYD Control Display"
-  color_threshold: "200"         # watts — power value green below, blue at/above (red tracks buzzer_threshold)
-  buzzer_threshold: "3000"       # watts — alarm beeps above this
+  color_threshold: "200"         # watts — power value green below, blue at/above
+  red_threshold: "3000"          # watts — power value red at/above (colour only; the alarm follows the EMS)
   mute_duration: "8h"            # tap the power card -> alarm muted this long (tap again = unmute)
   # --- Colour constants are written BGR (red/blue byte-swapped): the ILI9342 panel's
   #     MADCTL BGR bit swaps R/B, so values are pre-swapped to compensate.
@@ -156,14 +157,14 @@ sensor:
             char buf[16];
             snprintf(buf, sizeof(buf), "%.0f W", x * 1000.0f);
             return std::string(buf);
-      # Three-tier colour: green < 200 W, blue 200-3000 W, red at/above 3000 W (= alarm).
+      # Three-tier colour: green < 200 W, blue 200-3000 W, red at/above 3000 W.
       - lvgl.label.update:
           id: power_label
           text_color: !lambda |-
             float watts = x * 1000.0f;
             if (watts < ${color_threshold})
               return lv_color_hex(${col_low});   // green - low
-            else if (watts < ${buzzer_threshold})
+            else if (watts < ${red_threshold})
               return lv_color_hex(${col_mid});   // blue - normal
             else
               return lv_color_hex(${col_high});   // red - high (alarm)
@@ -175,6 +176,16 @@ sensor:
             char buf[16];
             snprintf(buf, sizeof(buf), "%.0f W", x * 1000.0f);
             return std::string(buf);
+
+  # --- EMS quarter-hour projection + ceiling (alarm only, not displayed) ---
+  # Projection = "geprojecteerd einde kwartier" on the EMS dashboard (kW);
+  # ceiling = EMS plafond (kW, follows the monthly bracket).
+  - platform: homeassistant
+    id: ems_projection
+    entity_id: !secret ems_projection_entity
+  - platform: homeassistant
+    id: ems_ceiling
+    entity_id: !secret ems_ceiling_entity
 
   # --- AI usage cells (imported from HA; reset cells are HA templates) ---
   # Claude 5h % and z.ai 5h % — show "<n>%"; reset cells show "HuMM" countdown.
@@ -494,14 +505,19 @@ text_sensor:
             if (x == "heat") return lv_color_hex(${col_high});
             return lv_color_hex(${col_label});
 
-# ---- Over-threshold detection (5 s debounce) -------------------------------
+# ---- Over-ceiling detection (5 s debounce) ---------------------------------
+# Alarm when the EMS projected end-of-quarter peak exceeds the EMS ceiling
+# (both kW, both live from HA — the ceiling follows the monthly bracket).
+# Missing/NaN on either side -> no alarm.
 binary_sensor:
   - platform: template
     id: power_high
-    name: "Power above threshold"
+    name: "Kwartierprojectie boven plafond"
     lambda: |-
-      if (!id(power_combined).has_state()) return false;
-      return id(power_combined).state * 1000.0f > ${buzzer_threshold};
+      if (!id(ems_projection).has_state() || !id(ems_ceiling).has_state()) return false;
+      float proj = id(ems_projection).state, plaf = id(ems_ceiling).state;
+      if (isnan(proj) || isnan(plaf)) return false;
+      return proj > plaf;
     # Must stay above for 5 s before the alarm arms.
     filters:
       - delayed_on: 5s
@@ -528,7 +544,7 @@ script:
                   - rtttl.play: "alarm:d=4,o=5,b=100:16e6"
             - delay: 3s
 
-  # Alarm mute: tap the power card to mute the over-power beep for ${mute_duration};
+  # Alarm mute: tap the power card to mute the over-ceiling beep for ${mute_duration};
   # tap again to unmute early. Visual: card turns dark red + mute icon top-right.
   - id: mute_timer
     mode: restart
@@ -555,7 +571,7 @@ script:
           bg_color: ${col_card}
       - lvgl.widget.hide: mute_icon
 
-  # Short, high, soft UI-feedback tick — deliberately distinct from the over-power alarm
+  # Short, high, soft UI-feedback tick — deliberately distinct from the over-ceiling alarm
   # (beep_loop above). rtttl has no per-play gain action, so we call the component's
   # public set_gain() from a lambda: drop to 0.025 for the tick, then restore 0.10 so the
   # alarm/doorbell keep their normal volume. C7 (2093 Hz) x ~31 ms vs the alarm's E6
@@ -616,7 +632,7 @@ lvgl:
       widgets:
         # --- Big power readout (value only; "Verbruik" label dropped) ----
         # Width shrunk 300 -> 230 to leave room for the top-right Page button.
-        # Tappable: toggles the over-power alarm mute (${mute_duration}).
+        # Tappable: toggles the over-ceiling alarm mute (${mute_duration}).
         - obj:
             id: power_card
             align: TOP_LEFT

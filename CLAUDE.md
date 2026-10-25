@@ -56,9 +56,13 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 
 ### Power Sensor
 - `sensor.your_power` reports in **kW** (not W) — multiplied by 1000 in lambdas
-- Two independent thresholds (both compared after ×1000):
-  - `color_threshold` = **200 W** — power value green below this, blue up to `buzzer_threshold` (3000 W), then red (3-tier)
-  - `buzzer_threshold` = **3000 W** — alarm beeps above this (5 s debounce)
+- Colour thresholds only (compared after ×1000): `color_threshold` = **200 W** green→blue, `red_threshold` = **3000 W** blue→red (3-tier). Neither drives the alarm any more.
+
+### Over-ceiling alarm (2026-10-25)
+- `beep_loop` is armed by `binary_sensor` `power_high` ("Kwartierprojectie boven plafond"), true when the **EMS projected end-of-quarter peak > EMS ceiling** (5 s `delayed_on`). Replaces the old live-power > 3000 W trigger (renamed `buzzer_threshold` → `red_threshold`, colour-only).
+- Projection = `ems_projection_entity` (`sensor.ems_kwartier_budget` — the EMS dashboard's "geprojecteerd einde kwartier", **kW**); ceiling = `ems_ceiling_entity` (`sensor.ems_plafond`, **kW**, dynamic — follows the monthly capacity bracket, 6.8 kW in Oct 2026). Both kW → compared directly, no ×1000. Missing/NaN on either → no alarm.
+- Identified from the EMS Lovelace dashboard (`.storage/lovelace.ems`, "⚡ Kwartier" markdown card: `proj = states('sensor.ems_kwartier_budget')`). The sensor is defined in HA `packages/ems_p1_pwm.yaml`.
+- The binary sensor rename created a new HA entity (`…_kwartierprojectie_boven_plafond`); the old `…_power_above_threshold` is orphaned — nothing in HA referenced it (grep'd), so it can be deleted from the entity registry.
 
 ### Touch (XPT2046)
 - Transform: `swap_xy: true, mirror_x: true, mirror_y: true` — correct combo for this PCB
@@ -127,6 +131,8 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - ✅ Weekly reset countdowns (2026-10-01): row 2 split into 4 × 74 cells matching row 1 — `cc week | cc reset | z.ai week | z.ai reset`. Two new HA template sensors (`*_weekly_minutes_to_reset`) in `packages/ai_usage_countdowns.yaml` (live + `hass-ai-usage-monitoring` mirror); format `NdHH`. HA restarted (user-approved) → sensors live (Claude 5d13, z.ai 0d12); CYD re-subscribed after restart. **User-verified OK** — the one oddity (`cc 5h` reset showing `--`) is correct upstream behaviour: no active Claude session → no reset time (see AI usage rows).
 
 - ✅ Alarm mute (2026-10-23): tap the main-page power card → over-power alarm muted 8 h (`mute_duration`), tap again → unmute; muted = dark-red card + 🔇 icon top-right. Compiled, OTA-flashed, clean boot. **Tap/visual verification pending user** (also check the icon doesn't touch wide readings like `-3500 W`). See "Alarm mute".
+
+- ✅ Alarm trigger → EMS (2026-10-25): beeps when the EMS projected end-of-quarter peak exceeds the EMS plafond (was: live power > 3000 W). Both sensors subscribed live (0.91 vs 6.80 kW), clean boot. **Field verification pending** (needs a real over-ceiling quarter). See "Over-ceiling alarm".
 
 ## ESPHome Environment
 - Venv: `~/esphome-cyd-venv`
