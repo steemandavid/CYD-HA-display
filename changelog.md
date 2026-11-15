@@ -1456,3 +1456,40 @@ The beep no longer fires on live power > 3000 W. It now fires when the EMS's
 - Live trigger not yet field-tested (needs a real over-ceiling quarter).
 - Docs follow-up: remaining "over-power" wording for current behaviour in README/CLAUDE.md
   changed to "over-ceiling" (historical status entries left as-is).
+
+---
+
+# 2026-11-15 (session 20): Stille Uren — CYD silent during HA quiet hours
+
+## Summary
+
+The CYD now never makes a sound during HA's **Stille Uren** (quiet hours): over-ceiling
+alarm, doorbell chime and tap ticks are all skipped while quiet hours are active.
+
+## Changes
+
+- Located HA's quiet-hours state: `input_boolean.text_to_speech_volume_muted`, switched
+  by the 'TTS: Quiet hours mute/unmute (weekday/weekend)' automations at the
+  `input_datetime.stille_uren_*` times (now 21:00 to 09:30 weekdays, 21:00 to 10:00 weekend).
+  Other HA automations (TTS etc.) already use it as an "is it quiet?" condition.
+- New secret `quiet_hours_entity` (placeholder `input_boolean.your_quiet_hours` in
+  `secrets.yaml.example`).
+- New `homeassistant` binary_sensor `quiet_hours` (internal). `on_press` → `rtttl.stop`
+  (cuts a tune in progress) + log; `on_release` → log.
+- Guards on all 3 `rtttl.play` paths: doorbell button (`if` + "suppressed" log),
+  `beep_loop` (`!alarm_muted && !quiet_hours`), `play_tap` (whole body inside `if`).
+- Compiled, OTA-flashed; boot log shows the sensor subscribed to the boolean.
+- **Live test 21:37:** pressed the doorbell chime button from HA during quiet hours →
+  log `Doorbell chime suppressed (stille uren)`.
+- Docs: CLAUDE.md section "Stille Uren / quiet hours" + status line, README feature bullet.
+  Commit `620b776`, pushed.
+
+## Notes
+
+- No HA state yet (boot / HA offline) → treated as not quiet → sound allowed.
+- `beep_loop` keeps looping during quiet hours, so an ongoing over-ceiling alarm resumes
+  beeping at the unmute time.
+- Changing the quiet-hours times in HA needs no reflash.
+- The doorbell button's real HA entity is `button.<room>_cyd_control_display_doorbell_chime`;
+  the docs' `button.your_cyd_doorbell_chime` is a placeholder (a service call to it
+  returns ok but does nothing).
