@@ -42,6 +42,13 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - `beep_loop` keeps looping while muted and only skips `rtttl.play`, so unmuting mid-alarm resumes beeping immediately. Only the alarm is muted — doorbell chime and tap ticks still sound.
 - **Visual:** power card bg → `col_muted` (dark red, true `0x4A1A1A`) + an `LV_SYMBOL_MUTE` (`\uF026`, built into Montserrat) icon in `col_high` at the card's top-right.
 
+### Stille Uren / quiet hours (2026-11-15)
+- The CYD makes **no sound at all** during HA's Stille Uren: alarm `beep_loop`, doorbell chime and `play_tap` ticks are all skipped while `quiet_hours` is on.
+- `quiet_hours` = `homeassistant` binary_sensor on `!secret quiet_hours_entity` = `input_boolean.text_to_speech_volume_muted`. That is HA's quiet-hours state: the 'TTS: Quiet hours mute/unmute (weekday/weekend)' automations switch it at the `input_datetime.stille_uren_*` times (21:00 to 09:30 weekdays, 21:00 to 10:00 weekend in Nov 2026). Changing those times in HA needs no reflash.
+- Turning on also does `rtttl.stop` (cuts a beep in progress). No HA state yet (boot, HA offline) -> state false -> sound allowed.
+- `beep_loop` keeps looping while quiet (like the 8 h mute), so the alarm resumes at the unmute time if still over the ceiling.
+- Verified 2026-11-15 21:37: pressing `button.your_cyd_doorbell_chime` during quiet hours logged "Doorbell chime suppressed (stille uren)".
+
 ### Speaker
 - Uses `ledc` output on GPIO26 (NOT `esp32_dac` — rtttl doesn't support esp32_dac)
 - RTTTL gain at 10%
@@ -133,6 +140,8 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - ✅ Alarm mute (2026-10-23): tap the main-page power card → over-power alarm muted 8 h (`mute_duration`), tap again → unmute; muted = dark-red card + 🔇 icon top-right. Compiled, OTA-flashed, clean boot. **Tap/visual verification pending user** (also check the icon doesn't touch wide readings like `-3500 W`). See "Alarm mute".
 
 - ✅ Alarm trigger → EMS (2026-10-25): beeps when the EMS projected end-of-quarter peak exceeds the EMS plafond (was: live power > 3000 W). Both sensors subscribed live (0.91 vs 6.80 kW), clean boot. **Field verification pending** (needs a real over-ceiling quarter). See "Over-ceiling alarm".
+
+- ✅ Stille Uren (2026-11-15): CYD silent (alarm, doorbell, tap ticks) while HA's `input_boolean.text_to_speech_volume_muted` is on. Compiled, OTA-flashed, doorbell press during quiet hours verified suppressed. See "Stille Uren / quiet hours".
 
 ## ESPHome Environment
 - Venv: `~/esphome-cyd-venv`

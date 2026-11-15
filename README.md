@@ -34,6 +34,9 @@ with stop-buttons), and **devices** (appliances + airco modes).
   tap again to unmute early. While muted the card turns dark red and shows a 🔇 icon
   top-right. Only the alarm is muted (doorbell chime + tap ticks still sound); a reboot
   clears the mute.
+- **Stille Uren (quiet hours)** — while HA's quiet-hours boolean (`quiet_hours_entity`,
+  switched by HA's Stille Uren mute/unmute automations) is on, the CYD makes no sound at all:
+  no alarm, no doorbell chime, no tap ticks.
 - **Temperature page (multi-page UI)** — tap the top-right **Pagina** button to cycle to the
   **temperature** page: two temperatures side by side, **Buiten** (outside) and **Binnen**
   (inside), each a large readout on a dark card. The button lives on the `top_layer`, so it

@@ -108,7 +108,13 @@ button:
     icon: "mdi:bell-ring"
     on_press:
       - logger.log: "Doorbell chime (from HA)"
-      - rtttl.play: "Doorbell:d=4,o=5,b=120: c6,g5,16p,c6,g5,16p,c6,g5"
+      - if:
+          condition:
+            lambda: return !id(quiet_hours).state;
+          then:
+            - rtttl.play: "Doorbell:d=4,o=5,b=120: c6,g5,16p,c6,g5,16p,c6,g5"
+          else:
+            - logger.log: "Doorbell chime suppressed (stille uren)"
 
 # ---- Display ---------------------------------------------------------------
 display:
@@ -526,6 +532,20 @@ binary_sensor:
     on_release:
       - script.stop: beep_loop
 
+  # Stille Uren (quiet hours) from HA: HA's quiet-hours automations switch this
+  # boolean on at the mute time and off at the unmute time. While on, the CYD
+  # makes NO sound at all (alarm, doorbell chime and tap ticks are all skipped).
+  # No state yet (HA not connected) -> state=false -> sound allowed.
+  - platform: homeassistant
+    id: quiet_hours
+    entity_id: !secret quiet_hours_entity
+    internal: true
+    on_press:
+      - logger.log: "Stille uren: speaker silenced"
+      - rtttl.stop:
+    on_release:
+      - logger.log: "Stille uren voorbij: speaker active"
+
 # ---- Beep loop: short beep every few seconds while armed --------------------
 script:
   - id: beep_loop
@@ -539,7 +559,7 @@ script:
             # resumes beeping straight away.
             - if:
                 condition:
-                  lambda: return !id(alarm_muted);
+                  lambda: return !id(alarm_muted) && !id(quiet_hours).state;
                 then:
                   - rtttl.play: "alarm:d=4,o=5,b=100:16e6"
             - delay: 3s
@@ -580,10 +600,14 @@ script:
   - id: play_tap
     mode: restart
     then:
-      - lambda: id(buzzer)->set_gain(0.025);
-      - rtttl.play: "tap:d=4,o=7,b=240:32c"
-      - delay: 120ms
-      - lambda: id(buzzer)->set_gain(0.10);
+      - if:
+          condition:
+            lambda: return !id(quiet_hours).state;
+          then:
+            - lambda: id(buzzer)->set_gain(0.025);
+            - rtttl.play: "tap:d=4,o=7,b=240:32c"
+            - delay: 120ms
+            - lambda: id(buzzer)->set_gain(0.10);
 
 # ---- Helper: momentary pulse on a switch -----------------------------------
 # Used by the three buttons. Calls turn_on, waits, then turn_off.
