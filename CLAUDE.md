@@ -63,10 +63,14 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 
 ### Power Sensor
 - `sensor.your_power` reports in **kW** (not W) — multiplied by 1000 in lambdas
-- Colour thresholds only (compared after ×1000): `color_threshold` = **200 W** green→blue, `red_threshold` = **3000 W** blue→red (3-tier). Neither drives the alarm any more.
+- **Power value colour (2026-11-18, mirrors the Awtrix rule):** computed by the `update_power_color` script, run from the `on_value` of `power_combined`, `ems_projection` and `ems_ceiling` (so it updates when the EMS values change, not only on live power).
+  - **Red** (`col_high`) = EMS projection **>=** plafond (immediate, no debounce): using more now raises this month's capacity bracket.
+  - Within the bracket: **green** < `color_threshold` (**2500 W**, live power ×1000), **blue** at/above.
+  - **Orange** (`col_error`, true `0xFF9100`) = projection or plafond missing/NaN. The beep stays **silent** in that case.
+  - `red_threshold` (3000 W) was removed. Edge case: projection == plafond is red but does not beep (beep needs `>`).
 
 ### Over-ceiling alarm (2026-10-25)
-- `beep_loop` is armed by `binary_sensor` `power_high` ("Kwartierprojectie boven plafond"), true when the **EMS projected end-of-quarter peak > EMS ceiling** (5 s `delayed_on`). Replaces the old live-power > 3000 W trigger (renamed `buzzer_threshold` → `red_threshold`, colour-only).
+- `beep_loop` is armed by `binary_sensor` `power_high` ("Kwartierprojectie boven plafond"), true when the **EMS projected end-of-quarter peak > EMS ceiling** (5 s `delayed_on`). Beeps **only** when projection > plafond; missing/NaN on either -> silent. Replaces the old live-power > 3000 W trigger.
 - Projection = `ems_projection_entity` (`sensor.ems_kwartier_budget` — the EMS dashboard's "geprojecteerd einde kwartier", **kW**); ceiling = `ems_ceiling_entity` (`sensor.ems_plafond`, **kW**, dynamic — follows the monthly capacity bracket, 6.8 kW in Oct 2026). Both kW → compared directly, no ×1000. Missing/NaN on either → no alarm.
 - Identified from the EMS Lovelace dashboard (`.storage/lovelace.ems`, "⚡ Kwartier" markdown card: `proj = states('sensor.ems_kwartier_budget')`). The sensor is defined in HA `packages/ems_p1_pwm.yaml`.
 - The binary sensor rename created a new HA entity (`…_kwartierprojectie_boven_plafond`); the old `…_power_above_threshold` is orphaned — nothing in HA referenced it (grep'd), so it can be deleted from the entity registry.
@@ -140,6 +144,8 @@ ESPHome firmware for a Cheap Yellow Display (CYD / ESP32-2432S028) acting as a w
 - ✅ Alarm mute (2026-10-23): tap the main-page power card → over-power alarm muted 8 h (`mute_duration`), tap again → unmute; muted = dark-red card + 🔇 icon top-right. Compiled, OTA-flashed, clean boot. **Tap/visual verification pending user** (also check the icon doesn't touch wide readings like `-3500 W`). See "Alarm mute".
 
 - ✅ Alarm trigger → EMS (2026-10-25): beeps when the EMS projected end-of-quarter peak exceeds the EMS plafond (was: live power > 3000 W). Both sensors subscribed live (0.91 vs 6.80 kW), clean boot. **Field verification pending** (needs a real over-ceiling quarter). See "Over-ceiling alarm".
+
+- ✅ Power colour follows the capacity bracket (2026-11-18): red = EMS projection >= plafond, green/blue split at 2500 W within the bracket, orange = EMS data unavailable; `red_threshold` removed. Compiled, OTA-flashed, clean boot (proj 5.28 vs plaf 5.90 kW). **Visual verification pending user.** See "Power value colour".
 
 - ✅ Stille Uren (2026-11-15): CYD silent (alarm, doorbell, tap ticks) while HA's `input_boolean.text_to_speech_volume_muted` is on. Compiled, OTA-flashed, doorbell press during quiet hours verified suppressed. See "Stille Uren / quiet hours".
 

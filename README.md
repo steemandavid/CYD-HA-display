@@ -15,7 +15,7 @@ with stop-buttons), and **devices** (appliances + airco modes).
 ## Features
 
 - **Live power readout** — displays `sensor.your_power` in watts, large and centered on a dark **Home Assistant-style** card.
-  - **Three-tier colour:** green below 200 W, blue 200–3000 W, red at/above 3000 W.
+  - **Colour follows the capacity bracket:** red when the EMS projected end-of-quarter reaches the EMS plafond (extra capacity cost this month); otherwise green below 2500 W, blue at/above. **Orange** = projection or plafond unavailable.
 - **AI usage row** — four cells between the power card and the buttons, colour-coded by provider:
   - **Claude** (clay `#D97757`): `cc 5h` % and `cc reset` countdown.
   - **z.ai** (blue `#1F63EC`): `z.ai 5h` % and `z.ai reset` countdown.
@@ -29,7 +29,7 @@ with stop-buttons), and **devices** (appliances + airco modes).
 - **Over-ceiling alarm** — short repeating beep while the EMS **projected end-of-quarter
   peak** ("geprojecteerd einde kwartier", `ems_projection_entity`) stays **above the EMS
   ceiling** (plafond, `ems_ceiling_entity` — follows the monthly bracket, e.g. 6.8 kW) for
-  5 s, via the onboard speaker. (Before 2026-10-25 it beeped on live power > 3000 W.)
+  5 s, via the onboard speaker. Silent when either EMS value is unavailable. (Before 2026-10-25 it beeped on live power > 3000 W.)
 - **Alarm mute** — tap the main-page **power card** to mute the over-ceiling beep for **8 h**;
   tap again to unmute early. While muted the card turns dark red and shows a 🔇 icon
   top-right. Only the alarm is muted (doorbell chime + tap ticks still sound); a reboot
@@ -182,8 +182,7 @@ above. To point the panel at different entities, just edit those values.
 
 | Substitution | Default | Meaning |
 |--------------|---------|---------|
-| `color_threshold` | `200` | Watts; label green below, red at/above |
-| `red_threshold` | `3000` | Watts; power value red at/above (colour only — the alarm follows the EMS) |
+| `color_threshold` | `2500` | Watts; power value green below, blue at/above (red follows the EMS projection vs plafond) |
 | `mute_duration` | `8h` | How long a power-card tap mutes the alarm |
 
 ## Key technical decisions & gotchas
