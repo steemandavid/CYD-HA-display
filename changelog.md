@@ -1493,3 +1493,37 @@ alarm, doorbell chime and tap ticks are all skipped while quiet hours are active
 - The doorbell button's real HA entity is `button.<room>_cyd_control_display_doorbell_chime`;
   the docs' `button.your_cyd_doorbell_chime` is a placeholder (a service call to it
   returns ok but does nothing).
+
+---
+
+# 2026-11-18 (session 21): Power colour follows the EMS capacity bracket
+
+## Summary
+
+The main-page power value's red colour now follows the capacity bracket (same rule as the
+Awtrix clock got today) instead of a fixed 3000 W: red when the EMS projected end-of-quarter
+reaches the EMS plafond. The beep alarm stays tied to projection > plafond only.
+
+## Changes
+
+| Case | Colour | Beep |
+|---|---|---|
+| projection or plafond missing/NaN | orange (`col_error`, true `0xFF9100`) | silent |
+| projection < plafond, live < 2500 W | green (`col_low`) | no |
+| projection < plafond, live >= 2500 W | blue (`col_mid`) | no |
+| projection >= plafond | red (`col_high`), immediate | only when projection > plafond for 5 s |
+
+- New script `update_power_color` (`mode: queued`) sets `power_label` `text_color`; called
+  from the `on_value` of `power_combined`, `ems_projection` and `ems_ceiling`.
+- `color_threshold` 200 → **2500 W** (user request); `red_threshold` removed.
+- `power_high` / `beep_loop` logic unchanged (already proj > plaf, NaN → false); comment
+  clarified.
+- Compiled, OTA-flashed; clean boot, proj 5.28 kW vs plaf 5.90 kW (not red, no beep).
+- README + CLAUDE.md updated. Commit `cebd978`, pushed.
+
+## Notes
+
+- Edge case: projection == plafond shows red but does not beep (beep needs `>`).
+- `sensor.ems_kwartier_budget` updates every ~1-2 s, so the colour script runs often; cheap,
+  no warnings in the log.
+- Visual verification pending user (orange only appears if an EMS sensor drops out).
